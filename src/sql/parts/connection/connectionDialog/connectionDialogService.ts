@@ -18,7 +18,7 @@ import { ICapabilitiesService } from 'sql/services/capabilities/capabilitiesServ
 import { ConnectionProfile } from 'sql/parts/connection/common/connectionProfile';
 import { localize } from 'vs/nls';
 
-import * as data from 'data';
+import * as sqlops from 'sqlops';
 
 import { IPartService } from 'vs/workbench/services/part/common/partService';
 import { withElementById } from 'vs/base/browser/builder';
@@ -54,6 +54,8 @@ export interface IConnectionComponentController {
 	handleOnConnecting(): void;
 	handleResetConnection(): void;
 	focusOnOpen(): void;
+	closeDatabaseDropdown(): void;
+	databaseDropdownExpanded: boolean;
 }
 
 export class ConnectionDialogService implements IConnectionDialogService {
@@ -67,7 +69,7 @@ export class ConnectionDialogService implements IConnectionDialogService {
 	private _model: ConnectionProfile;
 	private _params: INewConnectionParams;
 	private _inputModel: IConnectionProfile;
-	private _capabilitiesMaps: { [providerDisplayName: string]: data.DataProtocolServerCapabilities };
+	private _capabilitiesMaps: { [providerDisplayName: string]: sqlops.DataProtocolServerCapabilities };
 	private _providerNameToDisplayNameMap: { [providerDisplayName: string]: string };
 	private _providerTypes: string[];
 	private _currentProviderType: string = 'Microsoft SQL Server';
@@ -149,16 +151,21 @@ export class ConnectionDialogService implements IConnectionDialogService {
 	}
 
 	private handleOnCancel(params: INewConnectionParams): void {
-		if (params && params.input && params.connectionType === ConnectionType.editor) {
-			this._connectionManagementService.cancelEditorConnection(params.input);
+		if (this.uiController.databaseDropdownExpanded) {
+			this.uiController.closeDatabaseDropdown();
 		} else {
-			this._connectionManagementService.cancelConnection(this._model);
+			if (params && params.input && params.connectionType === ConnectionType.editor) {
+				this._connectionManagementService.cancelEditorConnection(params.input);
+			} else {
+				this._connectionManagementService.cancelConnection(this._model);
+			}
+			if (params && params.input && params.input.onConnectReject) {
+				params.input.onConnectReject();
+			}
+			this._connectionDialog.resetConnection();
+			this._connecting = false;
 		}
-		if (params && params.input && params.input.onConnectReject) {
-			params.input.onConnectReject();
-		}
-		this._connectionDialog.resetConnection();
-		this._connecting = false;
+		this.uiController.databaseDropdownExpanded = false;
 	}
 
 	private handleDefaultOnConnect(params: INewConnectionParams, connection: IConnectionProfile): Thenable<void> {
@@ -263,7 +270,7 @@ export class ConnectionDialogService implements IConnectionDialogService {
 		return newProfile;
 	}
 
-	private cacheCapabilities(capabilities: data.DataProtocolServerCapabilities) {
+	private cacheCapabilities(capabilities: sqlops.DataProtocolServerCapabilities) {
 		if (capabilities) {
 			this._providerTypes.push(capabilities.providerDisplayName);
 			this._capabilitiesMaps[capabilities.providerName] = capabilities;
@@ -326,7 +333,10 @@ export class ConnectionDialogService implements IConnectionDialogService {
 			let container = withElementById(this._partService.getWorkbenchElementId()).getHTMLElement().parentElement;
 			this._container = container;
 			this._connectionDialog = this._instantiationService.createInstance(ConnectionDialogWidget, this._providerTypes, this._providerNameToDisplayNameMap[this._model.providerName]);
-			this._connectionDialog.onCancel(() => this.handleOnCancel(this._connectionDialog.newConnectionParams));
+			this._connectionDialog.onCancel(() => {
+				this._connectionDialog.databaseDropdownExpanded = this.uiController.databaseDropdownExpanded;
+				this.handleOnCancel(this._connectionDialog.newConnectionParams);
+			});
 			this._connectionDialog.onConnect((profile) => this.handleOnConnect(this._connectionDialog.newConnectionParams, profile));
 			this._connectionDialog.onShowUiComponent((input) => this.handleShowUiComponent(input));
 			this._connectionDialog.onInitDialog(() => this.handleInitDialog());

@@ -336,8 +336,24 @@ export class SqlToolsServiceClient {
 							configurationSection: SqlToolsServiceClient._constants.extensionConfigSectionName
 						},
 						errorHandler: new LanguageClientErrorHandler(SqlToolsServiceClient._constants),
-						serverConnectionMetadata: this._config.getConfigValue(Constants.serverConnectionMetadata)
+						serverConnectionMetadata: this._config.getConfigValue(Constants.serverConnectionMetadata),
+						outputChannel: {
+							append: () => {
+							},
+							appendLine: () => {
+							},
+							dispose: () => {
+							},
+							clear: () => {
+							},
+							hide: () => {
+							},
+							name: '',
+							show: () => {
+							}
+						}
 					};
+
 					this._serviceStatus.showServiceLoading();
 					// cache the client instance for later use
 					client = new SqlOpsDataClient(SqlToolsServiceClient._constants.serviceName, serverOptions, clientOptions);
@@ -396,7 +412,22 @@ export class SqlToolsServiceClient {
 				configurationSection: SqlToolsServiceClient._constants.extensionConfigSectionName
 			},
 			errorHandler: new LanguageClientErrorHandler(SqlToolsServiceClient._constants),
-			serverConnectionMetadata: this._config.getConfigValue(Constants.serverConnectionMetadata)
+			serverConnectionMetadata: this._config.getConfigValue(Constants.serverConnectionMetadata),
+			outputChannel: {
+				append: () => {
+				},
+				appendLine: () => {
+				},
+				dispose: () => {
+				},
+				clear: () => {
+				},
+				hide: () => {
+				},
+				name: '',
+				show: () => {
+				}
+			}
 		};
 
 		this._serviceStatus.showServiceLoading();
