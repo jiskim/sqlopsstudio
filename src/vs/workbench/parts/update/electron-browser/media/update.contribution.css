@@ -5,11 +5,4 @@
 
 .update-activity {
 	-webkit-mask: url('update.svg') no-repeat 50% 50%;
-	-webkit-mask-size: 22px;
-}
-
-/* HACK @bpasero @ben */
-.file-icons-enabled .show-file-icons .release-notes-ext-file-icon.file-icon::before {
-	content: ' ';
-	background-image: url('code-icon.svg');
 }

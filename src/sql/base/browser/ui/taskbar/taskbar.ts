@@ -11,7 +11,7 @@ import 'vs/css!sql/media/icons/common-icons';
 
 import { ActionBar } from './actionbar';
 
-import { Builder, $ } from 'vs/base/browser/builder';
+import { Builder, $ } from 'sql/base/browser/builder';
 import { Action, IActionRunner, IAction } from 'vs/base/common/actions';
 import { ActionsOrientation } from 'vs/base/browser/ui/actionbar/actionbar';
 import { IContextMenuProvider } from 'vs/base/browser/ui/dropdown/dropdown';
@@ -82,7 +82,7 @@ export class Taskbar {
 	public static createTaskbarText(inputText: string): HTMLElement {
 		let element = document.createElement('div');
 		element.className = 'taskbarTextSeparator';
-		element.innerHTML = inputText;
+		element.textContent = inputText;
 		return element;
 	}
 
@@ -104,6 +104,14 @@ export class Taskbar {
 
 	public setAriaLabel(label: string): void {
 		this.actionBar.setAriaLabel(label);
+	}
+
+	public length(): number {
+		return this.actionBar.length();
+	}
+
+	public pull(index: number) {
+		this.actionBar.pull(index);
 	}
 
 	/**
@@ -138,4 +146,5 @@ export class Taskbar {
 	public dispose(): void {
 		this.actionBar.dispose();
 	}
+
 }

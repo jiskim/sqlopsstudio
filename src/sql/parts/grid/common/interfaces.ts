@@ -4,14 +4,7 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IColumnDefinition, IObservableCollection, IGridDataRow } from 'angular2-slickgrid';
-
-export interface ISlickRange {
-	fromCell: number;
-	fromRow: number;
-	toCell: number;
-	toRow: number;
-}
+import { ISlickColumn, VirtualizedCollection } from 'angular2-slickgrid';
 
 export interface IGridIcon {
 	showCondition: () => boolean;
@@ -41,8 +34,8 @@ export interface IGridIcon {
 }
 
 export interface IGridDataSet {
-	dataRows: IObservableCollection<IGridDataRow>;
-	columnDefinitions: IColumnDefinition[];
+	dataRows: VirtualizedCollection<{}>;
+	columnDefinitions: ISlickColumn<any>[];
 	resized: any; // EventEmitter<any>;
 	totalRows: number;
 	batchId: number;
@@ -61,7 +54,7 @@ export enum SaveFormat {
 export interface IGridInfo {
 	batchIndex: number;
 	resultSetNumber: number;
-	selection: ISlickRange[];
+	selection: Slick.Range[];
 	gridIndex: number;
 	rowIndex?: number;
 }
@@ -69,5 +62,5 @@ export interface ISaveRequest {
 	format: SaveFormat;
 	batchIndex: number;
 	resultSetNumber: number;
-	selection: ISlickRange[];
+	selection: Slick.Range[];
 }

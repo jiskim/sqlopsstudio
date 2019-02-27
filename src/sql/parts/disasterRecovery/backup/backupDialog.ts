@@ -3,20 +3,22 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Modal } from 'sql/base/browser/ui/modal/modal';
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
+import { Modal } from 'sql/workbench/browser/modal/modal';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { BackupModule } from 'sql/parts/disasterRecovery/backup/backup.module';
 import { BACKUP_SELECTOR } from 'sql/parts/disasterRecovery/backup/backup.component';
-import { IBootstrapService } from 'sql/services/bootstrap/bootstrapService';
-import { attachModalDialogStyler } from 'sql/common/theme/styler';
-import { IConnectionManagementService } from 'sql/parts/connection/common/connectionManagement';
+import { attachModalDialogStyler } from 'sql/platform/theme/common/styler';
+import { IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
 import * as TelemetryKeys from 'sql/common/telemetryKeys';
 
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IPartService } from 'vs/workbench/services/part/common/partService';
-import { Builder } from 'vs/base/browser/builder';
+import { Builder } from 'sql/base/browser/builder';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
+import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+import { bootstrapAngular } from 'sql/services/bootstrap/bootstrapService';
+import { IClipboardService } from 'vs/platform/clipboard/common/clipboardService';
 
 export class BackupDialog extends Modal {
 	private _bodyBuilder: Builder;
@@ -25,14 +27,15 @@ export class BackupDialog extends Modal {
 	private _moduleRef: any;
 
 	constructor(
-		@IBootstrapService private _bootstrapService: IBootstrapService,
-		@IThemeService private _themeService: IThemeService,
+		@IThemeService themeService: IThemeService,
 		@IPartService partService: IPartService,
 		@IConnectionManagementService private _connectionManagementService: IConnectionManagementService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IContextKeyService contextKeyService: IContextKeyService
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IInstantiationService private _instantiationService: IInstantiationService,
+		@IClipboardService clipboardService: IClipboardService
 	) {
-		super('', TelemetryKeys.Backup, partService, telemetryService, contextKeyService, { isAngular: true, hasErrors: true });
+		super('', TelemetryKeys.Backup, partService, telemetryService, clipboardService, themeService, contextKeyService, { isAngular: true, hasErrors: true });
 	}
 
 	protected renderBody(container: HTMLElement) {
@@ -53,7 +56,7 @@ export class BackupDialog extends Modal {
 	 * Get the bootstrap params and perform the bootstrap
 	 */
 	private bootstrapAngular(bodyContainer: HTMLElement) {
-		this._uniqueSelector = this._bootstrapService.bootstrap(
+		this._uniqueSelector = bootstrapAngular(this._instantiationService,
 			BackupModule,
 			bodyContainer,
 			BACKUP_SELECTOR,

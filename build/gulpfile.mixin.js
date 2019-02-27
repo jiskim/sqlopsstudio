@@ -6,8 +6,18 @@
 'use strict';
 
 const gulp = require('gulp');
+const json = require('gulp-json-editor');
+const buffer = require('gulp-buffer');
+const filter = require('gulp-filter');
+const es = require('event-stream');
+const util = require('./lib/util');
+const remote = require('gulp-remote-src');
+const zip = require('gulp-vinyl-zip');
+
 // {{SQL CARBON EDIT}}
 const jeditor = require('gulp-json-editor');
+
+const pkg = require('../package.json');
 
 gulp.task('mixin', function () {
   // {{SQL CARBON EDIT}}
@@ -24,10 +34,17 @@ gulp.task('mixin', function () {
 		return;
 	}
 
-  // {{SQL CARBON EDIT}}
+	// {{SQL CARBON EDIT}}
+	let serviceUrl = 'https://sqlopsextensions.blob.core.windows.net/marketplace/v1/extensionsGallery.json';
+	if (quality === 'insider') {
+		serviceUrl = `https://sqlopsextensions.blob.core.windows.net/marketplace/v1/extensionsGallery-${quality}.json`;
+	}
 	let newValues = {
 		"updateUrl": updateUrl,
-		"quality": quality
+		"quality": quality,
+		"extensionsGallery": {
+			"serviceUrl": serviceUrl
+		}
 	};
 
 	return gulp.src('./product.json')

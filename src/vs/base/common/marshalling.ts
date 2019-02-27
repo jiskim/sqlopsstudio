@@ -2,9 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import URI from 'vs/base/common/uri';
+import { URI } from 'vs/base/common/uri';
 
 export function stringify(obj: any): string {
 	return JSON.stringify(obj, replacer);
@@ -16,7 +15,7 @@ export function parse(text: string): any {
 	return data;
 }
 
-interface MarshalledObject {
+export interface MarshalledObject {
 	$mid: number;
 }
 
@@ -32,7 +31,7 @@ function replacer(key: string, value: any): any {
 	return value;
 }
 
-function revive(obj: any, depth: number): any {
+export function revive(obj: any, depth: number): any {
 
 	if (!obj || depth > 200) {
 		return obj;
@@ -55,4 +54,3 @@ function revive(obj: any, depth: number): any {
 
 	return obj;
 }
-

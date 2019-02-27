@@ -11,7 +11,6 @@
 // Because we want both instances to use the same perf-data
 // we store them globally
 // stores data as 'type','name','startTime','duration'
-global._performanceEntries = global._performanceEntries || [];
 
 if (typeof define !== "function" && typeof module === "object" && typeof module.exports === "object") {
 	// this is commonjs, fake amd
@@ -23,6 +22,12 @@ if (typeof define !== "function" && typeof module === "object" && typeof module.
 
 define([], function () {
 
+	var _global = this;
+	if (typeof global !== 'undefined') {
+		_global = global;
+	}
+	_global._performanceEntries = _global._performanceEntries || [];
+
 	// const _now = global.performance && performance.now ? performance.now : Date.now
 	const _now = Date.now;
 
@@ -31,39 +36,69 @@ define([], function () {
 	}
 
 	function exportEntries() {
-		return global._performanceEntries.splice(0);
+		return global._performanceEntries.slice(0);
 	}
 
-	function getEntries(type) {
+	function getEntries(type, name) {
 		const result = [];
 		const entries = global._performanceEntries;
-		for (let i = 0; i < entries.length; i += 4) {
-			if (entries[i] === type) {
+		for (let i = 0; i < entries.length; i += 5) {
+			if (entries[i] === type && (name === void 0 || entries[i + 1] === name)) {
 				result.push({
 					type: entries[i],
 					name: entries[i + 1],
 					startTime: entries[i + 2],
 					duration: entries[i + 3],
+					seq: entries[i + 4],
 				});
 			}
 		}
 
 		return result.sort((a, b) => {
-			return a.startTime - b.startTime;
+			return a.startTime - b.startTime || a.seq - b.seq;
 		});
 	}
 
-	function mark(name) {
-		global._performanceEntries.push('mark', name, _now(), 0);
-		if (typeof console.timeStamp === 'function') {
-			console.timeStamp(name);
+	function getEntry(type, name) {
+		const entries = global._performanceEntries;
+		for (let i = 0; i < entries.length; i += 5) {
+			if (entries[i] === type && entries[i + 1] === name) {
+				return {
+					type: entries[i],
+					name: entries[i + 1],
+					startTime: entries[i + 2],
+					duration: entries[i + 3],
+					seq: entries[i + 4],
+				};
+			}
 		}
 	}
 
-	function time(name) {
-		let from = `${name}/start`;
-		mark(from);
-		return { stop() { measure(name, from); } };
+	function getDuration(from, to) {
+		const entries = global._performanceEntries;
+		let target = to;
+		let endTime = 0;
+		for (let i = entries.length - 1; i >= 0; i -= 5) {
+			if (entries[i - 3] === target) {
+				if (target === to) {
+					// found `to` (end of interval)
+					endTime = entries[i - 2];
+					target = from;
+				} else {
+					return endTime - entries[i - 2];
+				}
+			}
+		}
+		return 0;
+	}
+
+	let seq = 0;
+
+	function mark(name) {
+		global._performanceEntries.push('mark', name, _now(), 0, seq++);
+		if (typeof console.timeStamp === 'function') {
+			console.timeStamp(name);
+		}
 	}
 
 	function measure(name, from, to) {
@@ -89,9 +124,9 @@ define([], function () {
 
 	function _getLastStartTime(name) {
 		const entries = global._performanceEntries;
-		for (let i = entries.length - 1; i >= 0; i -= 4) {
-			if (entries[i - 2] === name) {
-				return entries[i - 1];
+		for (let i = entries.length - 1; i >= 0; i -= 5) {
+			if (entries[i - 3] === name) {
+				return entries[i - 2];
 			}
 		}
 
@@ -101,8 +136,9 @@ define([], function () {
 	var exports = {
 		mark: mark,
 		measure: measure,
-		time: time,
 		getEntries: getEntries,
+		getEntry: getEntry,
+		getDuration: getDuration,
 		importEntries: importEntries,
 		exportEntries: exportEntries
 	};

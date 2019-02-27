@@ -2,23 +2,23 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import { Position } from 'vs/editor/common/core/position';
 import { CharCode } from 'vs/base/common/charCode';
-import * as strings from 'vs/base/common/strings';
-import { ICommand, TextModelResolvedOptions, IConfiguration, IModel, ScrollType } from 'vs/editor/common/editorCommon';
-import { TextModel } from 'vs/editor/common/model/textModel';
-import { Selection, ISelection } from 'vs/editor/common/core/selection';
-import { Range } from 'vs/editor/common/core/range';
-import { LanguageConfigurationRegistry } from 'vs/editor/common/modes/languageConfigurationRegistry';
 import { onUnexpectedError } from 'vs/base/common/errors';
+import * as strings from 'vs/base/common/strings';
+import { EditorAutoClosingStrategy, EditorAutoSurroundStrategy, IConfigurationChangedEvent } from 'vs/editor/common/config/editorOptions';
+import { CursorChangeReason } from 'vs/editor/common/controller/cursorEvents';
+import { Position } from 'vs/editor/common/core/position';
+import { Range } from 'vs/editor/common/core/range';
+import { ISelection, Selection } from 'vs/editor/common/core/selection';
+import { ICommand, IConfiguration, ScrollType } from 'vs/editor/common/editorCommon';
+import { ITextModel, TextModelResolvedOptions } from 'vs/editor/common/model';
+import { TextModel } from 'vs/editor/common/model/textModel';
 import { LanguageIdentifier } from 'vs/editor/common/modes';
 import { IAutoClosingPair } from 'vs/editor/common/modes/languageConfiguration';
-import { IConfigurationChangedEvent } from 'vs/editor/common/config/editorOptions';
-import { IViewModel } from 'vs/editor/common/viewModel/viewModel';
-import { CursorChangeReason } from 'vs/editor/common/controller/cursorEvents';
+import { LanguageConfigurationRegistry } from 'vs/editor/common/modes/languageConfigurationRegistry';
 import { VerticalRevealType } from 'vs/editor/common/view/viewEvents';
+import { IViewModel } from 'vs/editor/common/viewModel/viewModel';
 
 export interface IColumnSelectData {
 	toViewLineNumber: number;
@@ -51,7 +51,7 @@ export interface ICursors {
 	getColumnSelectData(): IColumnSelectData;
 	setColumnSelectData(columnSelectData: IColumnSelectData): void;
 
-	setStates(source: string, reason: CursorChangeReason, states: CursorState[]): void;
+	setStates(source: string, reason: CursorChangeReason, states: PartialCursorState[] | null): void;
 	reveal(horizontal: boolean, target: RevealTarget, scrollType: ScrollType): void;
 	revealRange(revealHorizontal: boolean, viewRange: Range, verticalType: VerticalRevealType, scrollType: ScrollType): void;
 
@@ -65,6 +65,10 @@ export interface CharacterMap {
 	[char: string]: string;
 }
 
+const autoCloseAlways = _ => true;
+const autoCloseNever = _ => false;
+const autoCloseBeforeWhitespace = (chr: string) => (chr === ' ' || chr === '\t');
+
 export class CursorConfiguration {
 	_cursorMoveConfigurationBrand: void;
 
@@ -77,21 +81,29 @@ export class CursorConfiguration {
 	public readonly useTabStops: boolean;
 	public readonly wordSeparators: string;
 	public readonly emptySelectionClipboard: boolean;
-	public readonly autoClosingBrackets: boolean;
+	public readonly copyWithSyntaxHighlighting: boolean;
+	public readonly multiCursorMergeOverlapping: boolean;
+	public readonly autoClosingBrackets: EditorAutoClosingStrategy;
+	public readonly autoClosingQuotes: EditorAutoClosingStrategy;
+	public readonly autoSurround: EditorAutoSurroundStrategy;
 	public readonly autoIndent: boolean;
 	public readonly autoClosingPairsOpen: CharacterMap;
 	public readonly autoClosingPairsClose: CharacterMap;
 	public readonly surroundingPairs: CharacterMap;
+	public readonly shouldAutoCloseBefore: { quote: (ch: string) => boolean, bracket: (ch: string) => boolean };
 
 	private readonly _languageIdentifier: LanguageIdentifier;
-	private _electricChars: { [key: string]: boolean; };
+	private _electricChars: { [key: string]: boolean; } | null;
 
 	public static shouldRecreate(e: IConfigurationChangedEvent): boolean {
 		return (
 			e.layoutInfo
 			|| e.wordSeparators
 			|| e.emptySelectionClipboard
+			|| e.multiCursorMergeOverlapping
 			|| e.autoClosingBrackets
+			|| e.autoClosingQuotes
+			|| e.autoSurround
 			|| e.useTabStops
 			|| e.lineHeight
 			|| e.readOnly
@@ -112,18 +124,27 @@ export class CursorConfiguration {
 		this.tabSize = modelOptions.tabSize;
 		this.insertSpaces = modelOptions.insertSpaces;
 		this.oneIndent = oneIndent;
-		this.pageSize = Math.floor(c.layoutInfo.height / c.fontInfo.lineHeight) - 2;
+		this.pageSize = Math.max(1, Math.floor(c.layoutInfo.height / c.fontInfo.lineHeight) - 2);
 		this.lineHeight = c.lineHeight;
 		this.useTabStops = c.useTabStops;
 		this.wordSeparators = c.wordSeparators;
 		this.emptySelectionClipboard = c.emptySelectionClipboard;
+		this.copyWithSyntaxHighlighting = c.copyWithSyntaxHighlighting;
+		this.multiCursorMergeOverlapping = c.multiCursorMergeOverlapping;
 		this.autoClosingBrackets = c.autoClosingBrackets;
+		this.autoClosingQuotes = c.autoClosingQuotes;
+		this.autoSurround = c.autoSurround;
 		this.autoIndent = c.autoIndent;
 
 		this.autoClosingPairsOpen = {};
 		this.autoClosingPairsClose = {};
 		this.surroundingPairs = {};
 		this._electricChars = null;
+
+		this.shouldAutoCloseBefore = {
+			quote: CursorConfiguration._getShouldAutoClose(languageIdentifier, this.autoClosingQuotes),
+			bracket: CursorConfiguration._getShouldAutoClose(languageIdentifier, this.autoClosingBrackets)
+		};
 
 		let autoClosingPairs = CursorConfiguration._getAutoClosingPairs(languageIdentifier);
 		if (autoClosingPairs) {
@@ -158,7 +179,7 @@ export class CursorConfiguration {
 		return TextModel.normalizeIndentation(str, this.tabSize, this.insertSpaces);
 	}
 
-	private static _getElectricCharacters(languageIdentifier: LanguageIdentifier): string[] {
+	private static _getElectricCharacters(languageIdentifier: LanguageIdentifier): string[] | null {
 		try {
 			return LanguageConfigurationRegistry.getElectricCharacters(languageIdentifier.id);
 		} catch (e) {
@@ -167,7 +188,7 @@ export class CursorConfiguration {
 		}
 	}
 
-	private static _getAutoClosingPairs(languageIdentifier: LanguageIdentifier): IAutoClosingPair[] {
+	private static _getAutoClosingPairs(languageIdentifier: LanguageIdentifier): IAutoClosingPair[] | null {
 		try {
 			return LanguageConfigurationRegistry.getAutoClosingPairs(languageIdentifier.id);
 		} catch (e) {
@@ -176,7 +197,30 @@ export class CursorConfiguration {
 		}
 	}
 
-	private static _getSurroundingPairs(languageIdentifier: LanguageIdentifier): IAutoClosingPair[] {
+	private static _getShouldAutoClose(languageIdentifier: LanguageIdentifier, autoCloseConfig: EditorAutoClosingStrategy): (ch: string) => boolean {
+		switch (autoCloseConfig) {
+			case 'beforeWhitespace':
+				return autoCloseBeforeWhitespace;
+			case 'languageDefined':
+				return CursorConfiguration._getLanguageDefinedShouldAutoClose(languageIdentifier);
+			case 'always':
+				return autoCloseAlways;
+			case 'never':
+				return autoCloseNever;
+		}
+	}
+
+	private static _getLanguageDefinedShouldAutoClose(languageIdentifier: LanguageIdentifier): (ch: string) => boolean {
+		try {
+			const autoCloseBeforeSet = LanguageConfigurationRegistry.getAutoCloseBeforeSet(languageIdentifier.id);
+			return c => autoCloseBeforeSet.indexOf(c) !== -1;
+		} catch (e) {
+			onUnexpectedError(e);
+			return autoCloseNever;
+		}
+	}
+
+	private static _getSurroundingPairs(languageIdentifier: LanguageIdentifier): IAutoClosingPair[] | null {
 		try {
 			return LanguageConfigurationRegistry.getSurroundingPairs(languageIdentifier.id);
 		} catch (e) {
@@ -289,11 +333,11 @@ export class SingleCursorState {
 export class CursorContext {
 	_cursorContextBrand: void;
 
-	public readonly model: IModel;
+	public readonly model: ITextModel;
 	public readonly viewModel: IViewModel;
 	public readonly config: CursorConfiguration;
 
-	constructor(configuration: IConfiguration, model: IModel, viewModel: IViewModel) {
+	constructor(configuration: IConfiguration, model: ITextModel, viewModel: IViewModel) {
 		this.model = model;
 		this.viewModel = viewModel;
 		this.config = new CursorConfiguration(
@@ -350,18 +394,40 @@ export class CursorContext {
 	}
 }
 
+export class PartialModelCursorState {
+	readonly modelState: SingleCursorState;
+	readonly viewState: null;
+
+	constructor(modelState: SingleCursorState) {
+		this.modelState = modelState;
+		this.viewState = null;
+	}
+}
+
+export class PartialViewCursorState {
+	readonly modelState: null;
+	readonly viewState: SingleCursorState;
+
+	constructor(viewState: SingleCursorState) {
+		this.modelState = null;
+		this.viewState = viewState;
+	}
+}
+
+export type PartialCursorState = CursorState | PartialModelCursorState | PartialViewCursorState;
+
 export class CursorState {
 	_cursorStateBrand: void;
 
-	public static fromModelState(modelState: SingleCursorState): CursorState {
-		return new CursorState(modelState, null);
+	public static fromModelState(modelState: SingleCursorState): PartialModelCursorState {
+		return new PartialModelCursorState(modelState);
 	}
 
-	public static fromViewState(viewState: SingleCursorState): CursorState {
-		return new CursorState(null, viewState);
+	public static fromViewState(viewState: SingleCursorState): PartialViewCursorState {
+		return new PartialViewCursorState(viewState);
 	}
 
-	public static fromModelSelection(modelSelection: ISelection): CursorState {
+	public static fromModelSelection(modelSelection: ISelection): PartialModelCursorState {
 		const selectionStartLineNumber = modelSelection.selectionStartLineNumber;
 		const selectionStartColumn = modelSelection.selectionStartColumn;
 		const positionLineNumber = modelSelection.positionLineNumber;
@@ -373,56 +439,12 @@ export class CursorState {
 		return CursorState.fromModelState(modelState);
 	}
 
-	public static fromModelSelections(modelSelections: ISelection[]): CursorState[] {
-		let states: CursorState[] = [];
+	public static fromModelSelections(modelSelections: ISelection[]): PartialModelCursorState[] {
+		let states: PartialModelCursorState[] = [];
 		for (let i = 0, len = modelSelections.length; i < len; i++) {
 			states[i] = this.fromModelSelection(modelSelections[i]);
 		}
 		return states;
-	}
-
-	public static ensureInEditableRange(context: CursorContext, states: CursorState[]): CursorState[] {
-		const model = context.model;
-		if (!model.hasEditableRange()) {
-			return states;
-		}
-
-		const modelEditableRange = model.getEditableRange();
-		const viewEditableRange = context.convertModelRangeToViewRange(modelEditableRange);
-
-		let result: CursorState[] = [];
-		for (let i = 0, len = states.length; i < len; i++) {
-			const state = states[i];
-
-			if (state.modelState) {
-				const newModelState = CursorState._ensureInEditableRange(state.modelState, modelEditableRange);
-				result[i] = newModelState ? CursorState.fromModelState(newModelState) : state;
-			} else {
-				const newViewState = CursorState._ensureInEditableRange(state.viewState, viewEditableRange);
-				result[i] = newViewState ? CursorState.fromViewState(newViewState) : state;
-			}
-		}
-		return result;
-	}
-
-	private static _ensureInEditableRange(state: SingleCursorState, editableRange: Range): SingleCursorState {
-		const position = state.position;
-
-		if (position.lineNumber < editableRange.startLineNumber || (position.lineNumber === editableRange.startLineNumber && position.column < editableRange.startColumn)) {
-			return new SingleCursorState(
-				state.selectionStart, state.selectionStartLeftoverVisibleColumns,
-				new Position(editableRange.startLineNumber, editableRange.startColumn), 0
-			);
-		}
-
-		if (position.lineNumber > editableRange.endLineNumber || (position.lineNumber === editableRange.endLineNumber && position.column > editableRange.endColumn)) {
-			return new SingleCursorState(
-				state.selectionStart, state.selectionStartLeftoverVisibleColumns,
-				new Position(editableRange.endLineNumber, editableRange.endColumn), 0
-			);
-		}
-
-		return null;
 	}
 
 	readonly modelState: SingleCursorState;
@@ -442,13 +464,13 @@ export class EditOperationResult {
 	_editOperationResultBrand: void;
 
 	readonly type: EditOperationType;
-	readonly commands: ICommand[];
+	readonly commands: (ICommand | null)[];
 	readonly shouldPushStackElementBefore: boolean;
 	readonly shouldPushStackElementAfter: boolean;
 
 	constructor(
 		type: EditOperationType,
-		commands: ICommand[],
+		commands: (ICommand | null)[],
 		opts: {
 			shouldPushStackElementBefore: boolean;
 			shouldPushStackElementAfter: boolean;
@@ -497,6 +519,8 @@ export class CursorColumns {
 			let charCode = lineContent.charCodeAt(i);
 			if (charCode === CharCode.Tab) {
 				result = this.nextTabStop(result, tabSize);
+			} else if (strings.isFullWidthCharacter(charCode)) {
+				result = result + 2;
 			} else {
 				result = result + 1;
 			}
@@ -522,6 +546,8 @@ export class CursorColumns {
 			let afterVisibleColumn: number;
 			if (charCode === CharCode.Tab) {
 				afterVisibleColumn = this.nextTabStop(beforeVisibleColumn, tabSize);
+			} else if (strings.isFullWidthCharacter(charCode)) {
+				afterVisibleColumn = beforeVisibleColumn + 2;
 			} else {
 				afterVisibleColumn = beforeVisibleColumn + 1;
 			}
@@ -572,4 +598,8 @@ export class CursorColumns {
 	public static prevTabStop(column: number, tabSize: number): number {
 		return column - 1 - (column - 1) % tabSize;
 	}
+}
+
+export function isQuote(ch: string): boolean {
+	return (ch === '\'' || ch === '"' || ch === '`');
 }

@@ -8,12 +8,13 @@ import * as TreeDefaults from 'vs/base/parts/tree/browser/treeDefaults';
 import { Promise, TPromise } from 'vs/base/common/winjs.base';
 import { generateUuid } from 'vs/base/common/uuid';
 import * as DOM from 'vs/base/browser/dom';
-import { $ } from 'vs/base/browser/builder';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 import { IKeyboardEvent } from 'vs/base/browser/keyboardEvent';
+import { $ } from 'sql/base/browser/builder';
 
 export interface Template {
 	label: HTMLElement;
+	row: HTMLElement;
 }
 
 export interface Resource {
@@ -33,17 +34,18 @@ export class DropdownRenderer implements tree.IRenderer {
 		return '';
 	}
 
-	public renderTemplate(tree: tree.ITree, templateId: string, container: HTMLElement) {
+	public renderTemplate(tree: tree.ITree, templateId: string, container: HTMLElement): Template {
 		const row = $('div.list-row').style('height', '22px').style('padding-left', '5px').getHTMLElement();
 		DOM.append(container, row);
 		const label = $('span.label').style('margin', 'auto').style('vertical-align', 'middle').getHTMLElement();
 		DOM.append(row, label);
 
-		return { label };
+		return { label, row };
 	}
 
 	public renderElement(tree: tree.ITree, element: Resource, templateId: string, templateData: Template): void {
 		templateData.label.innerText = element.value;
+		templateData.row.title = element.value;
 	}
 
 	public disposeTemplate(tree: tree.ITree, templateId: string, templateData: Template): void {
@@ -70,7 +72,7 @@ export class DropdownDataSource implements tree.IDataSource {
 		}
 	}
 
-	public getChildren(tree: tree.ITree, element: Resource | DropdownModel): Promise<any, any> {
+	public getChildren(tree: tree.ITree, element: Resource | DropdownModel): Promise<any> {
 		if (element instanceof DropdownModel) {
 			return TPromise.as(this.options);
 		} else {
@@ -78,7 +80,7 @@ export class DropdownDataSource implements tree.IDataSource {
 		}
 	}
 
-	public getParent(tree: tree.ITree, element: Resource | DropdownModel): Promise<any, any> {
+	public getParent(tree: tree.ITree, element: Resource | DropdownModel): Promise<any> {
 		if (element instanceof DropdownModel) {
 			return TPromise.as(undefined);
 		} else {
@@ -99,8 +101,17 @@ export class DropdownController extends TreeDefaults.DefaultController {
 	private _onSelectionChange = new Emitter<Resource>();
 	public readonly onSelectionChange: Event<Resource> = this._onSelectionChange.event;
 
+	private _onDropdownEscape = new Emitter<void>();
+	public readonly onDropdownEscape: Event<void> = this._onDropdownEscape.event;
+
 	constructor() {
 		super();
+	}
+
+	protected onEscape(tree: tree.ITree, event: IKeyboardEvent): boolean {
+		let response = super.onEscape(tree, event);
+		this._onDropdownEscape.fire();
+		return response;
 	}
 
 	protected onLeftClick(tree: tree.ITree, element: any, eventish: TreeDefaults.ICancelableEvent, origin: string): boolean {

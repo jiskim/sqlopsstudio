@@ -8,7 +8,7 @@
 import 'vs/css!vs/base/browser/ui/actionbar/actionbar';
 
 import { Promise } from 'vs/base/common/winjs.base';
-import { Builder, $ } from 'vs/base/browser/builder';
+import { Builder, $ } from 'sql/base/browser/builder';
 import { IAction, IActionRunner, ActionRunner } from 'vs/base/common/actions';
 import { EventEmitter } from 'sql/base/common/eventEmitter';
 import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
@@ -41,7 +41,6 @@ export class ActionBar extends ActionRunner implements IActionRunner {
 	private _items: IActionItem[];
 	private _focusedItem: number;
 	private _focusTracker: DOM.IFocusTracker;
-	private _toDispose: lifecycle.IDisposable[];
 
 	// Elements
 	private _domNode: HTMLElement;
@@ -153,11 +152,17 @@ export class ActionBar extends ActionRunner implements IActionRunner {
 	}
 
 	private updateFocusedItem(): void {
+		let actionIndex = 0;
 		for (let i = 0; i < this._actionsList.children.length; i++) {
 			let elem = this._actionsList.children[i];
+
 			if (DOM.isAncestor(document.activeElement, elem)) {
-				this._focusedItem = i;
+				this._focusedItem = actionIndex;
 				break;
+			}
+
+			if (elem.classList.contains('action-item')) {
+				actionIndex++;
 			}
 		}
 	}
@@ -346,7 +351,7 @@ export class ActionBar extends ActionRunner implements IActionRunner {
 		let actionItem = this._items[this._focusedItem];
 		if (actionItem instanceof BaseActionItem) {
 			const context = (actionItem._context === null || actionItem._context === undefined) ? event : actionItem._context;
-			this.run(actionItem._action, context).done();
+			this.run(actionItem._action, context);
 		}
 	}
 

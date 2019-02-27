@@ -5,6 +5,7 @@
 
 'use strict';
 
+// {{SQL CARBON EDIT}}
 import types = require('vs/base/common/types');
 
 export function clamp(value: number, min: number, max: number): number {
@@ -18,6 +19,7 @@ export function rot(index: number, modulo: number): number {
 // {{SQL CARBON EDIT}}
 export type NumberCallback = (index: number) => void;
 
+// {{SQL CARBON EDIT}}
 export function count(to: number, callback: NumberCallback): void;
 export function count(from: number, to: number, callback: NumberCallback): void;
 export function count(fromOrTo: number, toOrCallback?: NumberCallback | number, callback?: NumberCallback): any {
@@ -54,4 +56,13 @@ export function countToArray(fromOrTo: number, to?: number): number[] {
 	}
 
 	return result;
+}
+// {{END SQL CARBON EDIT}}
+
+export class Counter {
+	private _next = 0;
+
+	getNext(): number {
+		return this._next++;
+	}
 }

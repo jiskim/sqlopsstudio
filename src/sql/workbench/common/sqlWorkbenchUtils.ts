@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import ConnectionConstants = require('sql/parts/connection/common/constants');
+import ConnectionConstants = require('sql/platform/connection/common/constants');
 import { QueryInput } from 'sql/parts/query/common/queryInput';
 
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
-import { IEditorInput } from 'vs/platform/editor/common/editor';
-import URI from 'vs/base/common/uri';
+import { URI } from 'vs/base/common/uri';
+import { IEditorInput } from 'vs/workbench/common/editor';
 
 /**
  * Gets the 'sql' configuration section for use in looking up settings. Note that configs under

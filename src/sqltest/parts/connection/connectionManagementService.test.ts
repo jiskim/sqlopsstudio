@@ -6,20 +6,20 @@
 'use strict';
 
 import { ConnectionDialogTestService } from 'sqltest/stubs/connectionDialogTestService';
-import { ConnectionManagementService } from 'sql/parts/connection/common/connectionManagementService';
-import { ConnectionStatusManager } from 'sql/parts/connection/common/connectionStatusManager';
-import { ConnectionStore } from 'sql/parts/connection/common/connectionStore';
+import { ConnectionManagementService } from 'sql/platform/connection/common/connectionManagementService';
+import { ConnectionStatusManager } from 'sql/platform/connection/common/connectionStatusManager';
+import { ConnectionStore } from 'sql/platform/connection/common/connectionStore';
 import {
 	INewConnectionParams, ConnectionType,
 	IConnectionCompletionOptions, IConnectionResult,
 	RunQueryOnConnectionMode
-} from 'sql/parts/connection/common/connectionManagement';
-import * as Constants from 'sql/parts/connection/common/constants';
-import * as Utils from 'sql/parts/connection/common/utils';
-import { IHandleFirewallRuleResult } from 'sql/parts/accountManagement/common/interfaces';
+} from 'sql/platform/connection/common/connectionManagement';
+import * as Constants from 'sql/platform/connection/common/constants';
+import * as Utils from 'sql/platform/connection/common/utils';
+import { IHandleFirewallRuleResult } from 'sql/workbench/services/resourceProvider/common/resourceProviderService';
 
 import { WorkbenchEditorTestService } from 'sqltest/stubs/workbenchEditorTestService';
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { EditorGroupTestService } from 'sqltest/stubs/editorGroupService';
 import { CapabilitiesTestService } from 'sqltest/stubs/capabilitiesTestService';
 import { ConnectionProviderStub } from 'sqltest/stubs/connectionProviderStub';
@@ -32,7 +32,9 @@ import { WorkspaceConfigurationTestService } from 'sqltest/stubs/workspaceConfig
 
 import * as assert from 'assert';
 import * as TypeMoq from 'typemoq';
-import { IConnectionProfileGroup } from 'sql/parts/connection/common/connectionProfileGroup';
+import { IConnectionProfileGroup, ConnectionProfileGroup } from 'sql/platform/connection/common/connectionProfileGroup';
+import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
+import { AccountManagementTestService } from 'sqltest/stubs/accountManagementStubs';
 
 suite('SQL ConnectionManagementService tests', () => {
 
@@ -45,10 +47,12 @@ suite('SQL ConnectionManagementService tests', () => {
 	let mssqlConnectionProvider: TypeMoq.Mock<ConnectionProviderStub>;
 	let workspaceConfigurationServiceMock: TypeMoq.Mock<WorkspaceConfigurationTestService>;
 	let resourceProviderStubMock: TypeMoq.Mock<ResourceProviderStub>;
+	let accountManagementService: TypeMoq.Mock<AccountManagementTestService>;
 
 	let none: void;
 
 	let connectionProfile: IConnectionProfile = {
+		connectionName: 'new name',
 		serverName: 'new server',
 		databaseName: 'database',
 		userName: 'user',
@@ -86,6 +90,9 @@ suite('SQL ConnectionManagementService tests', () => {
 		mssqlConnectionProvider = TypeMoq.Mock.ofType(ConnectionProviderStub);
 		let resourceProviderStub = new ResourceProviderStub();
 		resourceProviderStubMock = TypeMoq.Mock.ofInstance(resourceProviderStub);
+		accountManagementService = TypeMoq.Mock.ofType(AccountManagementTestService);
+		let root = new ConnectionProfileGroup(ConnectionProfileGroup.RootGroupName, undefined, ConnectionProfileGroup.RootGroupName, undefined, undefined);
+		root.connections = [ConnectionProfile.fromIConnectionProfile(capabilitiesService, connectionProfile)];
 
 		connectionDialogService.setup(x => x.showDialog(TypeMoq.It.isAny(), TypeMoq.It.isAny(), TypeMoq.It.isAny(), undefined)).returns(() => TPromise.as(none));
 		connectionDialogService.setup(x => x.showDialog(TypeMoq.It.isAny(), TypeMoq.It.isAny(), undefined, undefined)).returns(() => TPromise.as(none));
@@ -93,9 +100,9 @@ suite('SQL ConnectionManagementService tests', () => {
 		connectionDialogService.setup(x => x.showDialog(TypeMoq.It.isAny(), TypeMoq.It.isAny(), undefined, TypeMoq.It.isAny())).returns(() => TPromise.as(none));
 
 		connectionStore.setup(x => x.addActiveConnection(TypeMoq.It.isAny())).returns(() => Promise.resolve());
+		connectionStore.setup(x => x.addActiveConnection(TypeMoq.It.isAny(), TypeMoq.It.isAny())).returns(() => Promise.resolve());
 		connectionStore.setup(x => x.saveProfile(TypeMoq.It.isAny())).returns(() => Promise.resolve(connectionProfile));
 		workbenchEditorService.setup(x => x.openEditor(undefined, TypeMoq.It.isAny(), TypeMoq.It.isAny())).returns(() => TPromise.as(undefined));
-		editorGroupService.setup(x => x.getStacksModel()).returns(() => undefined);
 		connectionStore.setup(x => x.addSavedPassword(TypeMoq.It.is<IConnectionProfile>(
 			c => c.serverName === connectionProfile.serverName))).returns(() => Promise.resolve({ profile: connectionProfile, savedCred: true }));
 		connectionStore.setup(x => x.addSavedPassword(TypeMoq.It.is<IConnectionProfile>(
@@ -105,6 +112,7 @@ suite('SQL ConnectionManagementService tests', () => {
 			c => c.serverName === connectionProfileWithEmptyUnsavedPassword.serverName))).returns(
 			() => Promise.resolve({ profile: connectionProfileWithEmptyUnsavedPassword, savedCred: false }));
 		connectionStore.setup(x => x.isPasswordRequired(TypeMoq.It.isAny())).returns(() => true);
+		connectionStore.setup(x => x.getConnectionProfileGroups(false, undefined)).returns(() => [root]);
 
 		mssqlConnectionProvider.setup(x => x.connect(TypeMoq.It.isAny(), TypeMoq.It.isAny())).returns(() => undefined);
 
@@ -142,13 +150,11 @@ suite('SQL ConnectionManagementService tests', () => {
 		let connectionManagementService = new ConnectionManagementService(
 			undefined,
 			connectionStore.object,
+			undefined,
 			connectionDialogService.object,
 			undefined,
 			undefined,
-			undefined,
 			workbenchEditorService.object,
-			undefined,
-			undefined,
 			undefined,
 			workspaceConfigurationServiceMock.object,
 			undefined,
@@ -158,7 +164,7 @@ suite('SQL ConnectionManagementService tests', () => {
 			undefined,
 			resourceProviderStubMock.object,
 			undefined,
-			undefined
+			accountManagementService.object
 		);
 		return connectionManagementService;
 	}
@@ -168,7 +174,7 @@ suite('SQL ConnectionManagementService tests', () => {
 			connectionDialogService.verify(x => x.showDialog(
 				TypeMoq.It.isAny(),
 				TypeMoq.It.is<INewConnectionParams>(p => p.connectionType === connectionType && (uri === undefined || p.input.uri === uri)),
-				TypeMoq.It.is<IConnectionProfile>(c => c.serverName === connectionProfile.serverName),
+				TypeMoq.It.is<IConnectionProfile>(c => c !== undefined && c.serverName === connectionProfile.serverName),
 				connectionResult ? TypeMoq.It.is<IConnectionResult>(r => r.errorMessage === connectionResult.errorMessage && r.callStack === connectionResult.callStack) : undefined),
 				didShow ? TypeMoq.Times.once() : TypeMoq.Times.never());
 
@@ -255,6 +261,7 @@ suite('SQL ConnectionManagementService tests', () => {
 				onConnectStart: undefined,
 				onDisconnect: undefined,
 				onConnectSuccess: undefined,
+				onConnectCanceled: undefined,
 				uri: 'Editor Uri'
 			},
 			runQueryOnCompletion: RunQueryOnConnectionMode.executeQuery
@@ -275,6 +282,7 @@ suite('SQL ConnectionManagementService tests', () => {
 				onConnectStart: undefined,
 				onDisconnect: undefined,
 				onConnectSuccess: undefined,
+				onConnectCanceled: undefined,
 				uri: 'Editor Uri'
 			},
 			runQueryOnCompletion: RunQueryOnConnectionMode.executeQuery
@@ -344,6 +352,7 @@ suite('SQL ConnectionManagementService tests', () => {
 					onConnectReject: undefined,
 					onConnectStart: undefined,
 					onDisconnect: undefined,
+					onConnectCanceled: undefined,
 					uri: uri
 				},
 				querySelection: undefined,
@@ -657,6 +666,7 @@ suite('SQL ConnectionManagementService tests', () => {
 					onConnectReject: undefined,
 					onConnectStart: undefined,
 					onDisconnect: undefined,
+					onConnectCanceled: undefined,
 					uri: uri
 				},
 				querySelection: undefined,
@@ -752,8 +762,8 @@ suite('SQL ConnectionManagementService tests', () => {
 		connect(ownerUri, undefined, false, connectionProfileWithoutDb).then(() => {
 			try {
 				// If I get the URI for the connection with or without a database from the connection management service
-				let actualUriWithDb = connectionManagementService.getConnectionId(connectionProfileWithDb);
-				let actualUriWithoutDb = connectionManagementService.getConnectionId(connectionProfileWithoutDb);
+				let actualUriWithDb = connectionManagementService.getConnectionUri(connectionProfileWithDb);
+				let actualUriWithoutDb = connectionManagementService.getConnectionUri(connectionProfileWithoutDb);
 
 				// Then the retrieved URIs should match the one on the connection
 				let expectedUri = Utils.generateUri(connectionProfileWithoutDb);
@@ -793,11 +803,121 @@ suite('SQL ConnectionManagementService tests', () => {
 
 	test('getActiveConnectionCredentials returns the credentials dictionary for a connection profile', () => {
 		let profile = Object.assign({}, connectionProfile);
-		profile.options = {password: profile.password};
+		profile.options = { password: profile.password };
 		profile.id = 'test_id';
 		connectionStatusManager.addConnection(profile, 'test_uri');
 		(connectionManagementService as any)._connectionStatusManager = connectionStatusManager;
 		let credentials = connectionManagementService.getActiveConnectionCredentials(profile.id);
 		assert.equal(credentials['password'], profile.options['password']);
+	});
+
+	test('getConnectionUriFromId returns a URI of an active connection with the given id', () => {
+		let profile = Object.assign({}, connectionProfile);
+		profile.options = { password: profile.password };
+		profile.id = 'test_id';
+		let uri = 'test_initial_uri';
+		connectionStatusManager.addConnection(profile, uri);
+		(connectionManagementService as any)._connectionStatusManager = connectionStatusManager;
+
+		// If I call getConnectionUriFromId on the given connection
+		let foundUri = connectionManagementService.getConnectionUriFromId(profile.id);
+
+		// Then the returned URI matches the connection's original URI
+		assert.equal(foundUri, uri);
+	});
+
+	test('getConectionUriFromId returns undefined if the given connection is not active', () => {
+		let profile = Object.assign({}, connectionProfile);
+		profile.options = { password: profile.password };
+		profile.id = 'test_id';
+		connectionStatusManager.addConnection(profile, Utils.generateUri(profile));
+		(connectionManagementService as any)._connectionStatusManager = connectionStatusManager;
+
+		// If I call getConnectionUriFromId with a different URI than the connection's
+		let foundUri = connectionManagementService.getConnectionUriFromId('different_id');
+
+		// Then undefined is returned
+		assert.equal(foundUri, undefined);
+	});
+
+	test('addSavedPassword fills in Azure access tokens for Azure accounts', async () => {
+		// Set up a connection profile that uses Azure
+		let azureConnectionProfile = ConnectionProfile.fromIConnectionProfile(capabilitiesService, connectionProfile);
+		azureConnectionProfile.authenticationType = 'AzureMFA';
+		let username = 'testuser@microsoft.com';
+		azureConnectionProfile.userName = username;
+		let servername = 'test-database.database.windows.net';
+		azureConnectionProfile.serverName = servername;
+
+		// Set up the account management service to return a token for the given user
+		accountManagementService.setup(x => x.getAccountsForProvider(TypeMoq.It.isAny())).returns(providerId => Promise.resolve<sqlops.Account[]>([
+			{
+				key: {
+					accountId: username,
+					providerId: providerId
+				},
+				displayInfo: undefined,
+				isStale: false,
+				properties: undefined
+			}
+		]));
+		let testToken = 'testToken';
+		accountManagementService.setup(x => x.getSecurityToken(TypeMoq.It.isAny(), TypeMoq.It.isAny())).returns(() => Promise.resolve({
+			azurePublicCloud: {
+				token: testToken
+			}
+		}));
+		connectionStore.setup(x => x.addSavedPassword(TypeMoq.It.is(profile => profile.authenticationType === 'AzureMFA'))).returns(profile => Promise.resolve({
+			profile: profile,
+			savedCred: false
+		}));
+
+		// If I call addSavedPassword
+		let profileWithCredentials = await connectionManagementService.addSavedPassword(azureConnectionProfile);
+
+		// Then the returned profile has the account token set
+		assert.equal(profileWithCredentials.userName, username);
+		assert.equal(profileWithCredentials.options['azureAccountToken'], testToken);
+	});
+
+	test('addSavedPassword fills in Azure access token for selected tenant', async () => {
+		// Set up a connection profile that uses Azure
+		let azureConnectionProfile = ConnectionProfile.fromIConnectionProfile(capabilitiesService, connectionProfile);
+		azureConnectionProfile.authenticationType = 'AzureMFA';
+		let username = 'testuser@microsoft.com';
+		azureConnectionProfile.userName = username;
+		let servername = 'test-database.database.windows.net';
+		azureConnectionProfile.serverName = servername;
+		let azureTenantId = 'testTenant';
+		azureConnectionProfile.azureTenantId = azureTenantId;
+
+		// Set up the account management service to return a token for the given user
+		accountManagementService.setup(x => x.getAccountsForProvider(TypeMoq.It.isAny())).returns(providerId => Promise.resolve<sqlops.Account[]>([
+			{
+				key: {
+					accountId: username,
+					providerId: providerId
+				},
+				displayInfo: undefined,
+				isStale: false,
+				properties: undefined
+			}
+		]));
+		let testToken = 'testToken';
+		let returnedTokens = {};
+		returnedTokens['azurePublicCloud'] = { token: 'badToken' };
+		returnedTokens[azureTenantId] = { token: testToken };
+		accountManagementService.setup(x => x.getSecurityToken(TypeMoq.It.isAny(), TypeMoq.It.isAny())).returns(() => Promise.resolve(returnedTokens));
+		connectionStore.setup(x => x.addSavedPassword(TypeMoq.It.is(profile => profile.authenticationType === 'AzureMFA'))).returns(profile => Promise.resolve({
+			profile: profile,
+			savedCred: false
+		}));
+
+		// If I call addSavedPassword
+		let profileWithCredentials = await connectionManagementService.addSavedPassword(azureConnectionProfile);
+
+		// Then the returned profile has the account token set corresponding to the requested tenant
+		assert.equal(profileWithCredentials.userName, username);
+		assert.equal(profileWithCredentials.options['azureAccountToken'], testToken);
 	});
 });

@@ -30,18 +30,18 @@ export class TaskHistoryActionProvider extends ContributableActionProvider {
 	/**
 	 * Return actions given an element in the tree
 	 */
-	public getActions(tree: ITree, element: any): TPromise<IAction[]> {
+	public getActions(tree: ITree, element: any): IAction[] {
 		if (element instanceof TaskNode) {
-			return TPromise.as(this.getTaskHistoryActions(tree, element));
+			return this.getTaskHistoryActions(tree, element);
 		}
-		return TPromise.as([]);
+		return [];
 	}
 
 	public hasSecondaryActions(tree: ITree, element: any): boolean {
 		return false;
 	}
 
-	public getSecondaryActions(tree: ITree, element: any): TPromise<IAction[]> {
+	public getSecondaryActions(tree: ITree, element: any): IAction[] {
 		return super.getSecondaryActions(tree, element);
 	}
 
@@ -52,12 +52,12 @@ export class TaskHistoryActionProvider extends ContributableActionProvider {
 		var actions = [];
 
 		// get actions for tasks in progress
-		if (element.status === TaskStatus.inProgress && element.isCancelable) {
+		if (element.status === TaskStatus.InProgress && element.isCancelable) {
 			actions.push(this._instantiationService.createInstance(CancelAction, CancelAction.ID, CancelAction.LABEL));
 		}
 
 		// get actions for tasks succeeded
-		if (element.status === TaskStatus.succeeded || element.status === TaskStatus.succeededWithWarning) {
+		if (element.status === TaskStatus.Succeeded || element.status === TaskStatus.SucceededWithWarning) {
 			if (element.taskExecutionMode === TaskExecutionMode.executeAndScript) {
 				actions.push(this._instantiationService.createInstance(ScriptAction, ScriptAction.ID, ScriptAction.LABEL));
 			}

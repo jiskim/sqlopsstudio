@@ -3,10 +3,10 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 'use strict';
-import 'vs/css!./media/profilerDialog';
+import 'vs/css!sql/parts/profiler/media/profiler';
 
-import { Modal } from 'sql/base/browser/ui/modal/modal';
-import { attachModalDialogStyler } from 'sql/common/theme/styler';
+import { Modal } from 'sql/workbench/browser/modal/modal';
+import { attachModalDialogStyler } from 'sql/platform/theme/common/styler';
 import { ProfilerInput } from 'sql/parts/profiler/editor/profilerInput';
 import * as TelemetryKeys from 'sql/common/telemetryKeys';
 
@@ -14,7 +14,7 @@ import { IDisposable, dispose } from 'vs/base/common/lifecycle';
 import { IPartService } from 'vs/workbench/services/part/common/partService';
 import * as nls from 'vs/nls';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
-import { Builder } from 'vs/base/browser/builder';
+import { Builder } from 'sql/base/browser/builder';
 import { SelectBox } from 'vs/base/browser/ui/selectBox/selectBox';
 import { Tree } from 'vs/base/parts/tree/browser/treeImpl';
 import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
@@ -22,9 +22,11 @@ import * as DOM from 'vs/base/browser/dom';
 import { IDataSource, ITree, IRenderer } from 'vs/base/parts/tree/browser/tree';
 import { TPromise } from 'vs/base/common/winjs.base';
 import { attachListStyler } from 'vs/platform/theme/common/styler';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
+import { IContextViewService } from 'vs/platform/contextview/browser/contextView';
+import { IClipboardService } from 'sql/platform/clipboard/common/clipboardService';
 
 class EventItem {
 
@@ -312,24 +314,26 @@ export class ProfilerColumnEditorDialog extends Modal {
 
 	constructor(
 		@IPartService _partService: IPartService,
-		@IThemeService private _themeService: IThemeService,
+		@IThemeService themeService: IThemeService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IContextKeyService contextKeyService: IContextKeyService
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IContextViewService private _contextViewService: IContextViewService,
+		@IClipboardService clipboardService: IClipboardService
 	) {
-		super(nls.localize('profiler', 'Profiler'), TelemetryKeys.Profiler, _partService, telemetryService, contextKeyService);
+		super(nls.localize('profilerColumnDialog.profiler', 'Profiler'), TelemetryKeys.Profiler, _partService, telemetryService, clipboardService, themeService, contextKeyService);
 	}
 
 	public render(): void {
 		super.render();
 		this._register(attachModalDialogStyler(this, this._themeService));
-		this.addFooterButton(nls.localize('ok', "OK"), () => this.onAccept(undefined));
-		this.addFooterButton(nls.localize('cancel', "Cancel"), () => this.onClose(undefined));
+		this.addFooterButton(nls.localize('profilerColumnDialog.ok', "OK"), () => this.onAccept(undefined));
+		this.addFooterButton(nls.localize('profilerColumnDialog.cancel', "Cancel"), () => this.onClose(undefined));
 	}
 
 	protected renderBody(container: HTMLElement): void {
 		let builder = new Builder(container);
 		builder.div({}, b => {
-			this._selectBox = new SelectBox(this._options, 0);
+			this._selectBox = new SelectBox(this._options, 0, this._contextViewService);
 			this._selectBox.render(b.getHTMLElement());
 			this._register(this._selectBox.onDidSelect(e => {
 				this._selectedValue = e.index;
@@ -358,7 +362,10 @@ export class ProfilerColumnEditorDialog extends Modal {
 		super.onAccept(e);
 	}
 
+	// currently not used, this dialog is a work in progress
+	// tracked in issue #1545 https://github.com/Microsoft/azuredatastudio/issues/1545
 	private _updateInput(): void {
+		/*
 		this._element.getUnsortedChildren().forEach(e => {
 			let origEvent = this._input.sessionTemplate.view.events.find(i => i.name === e.id);
 			if (e.indeterminate) {
@@ -385,9 +392,13 @@ export class ProfilerColumnEditorDialog extends Modal {
 		}, []);
 		newColumns.unshift('EventClass');
 		this._input.setColumns(newColumns);
+		*/
 	}
 
+	// currently not used, this dialog is a work in progress
+	// tracked in issue #1545 https://github.com/Microsoft/azuredatastudio/issues/1545
 	private _updateList(): void {
+		/*
 		this._element = new SessionItem(this._input.sessionTemplate.name, this._selectedValue === 0 ? 'event' : 'column');
 		this._input.sessionTemplate.events.forEach(item => {
 			let event = new EventItem(item.name, this._element);
@@ -400,6 +411,7 @@ export class ProfilerColumnEditorDialog extends Modal {
 		});
 		this._tree.setInput(this._element);
 		this._tree.layout(DOM.getTotalHeight(this._treeContainer));
+		*/
 	}
 
 	protected layout(height?: number): void {

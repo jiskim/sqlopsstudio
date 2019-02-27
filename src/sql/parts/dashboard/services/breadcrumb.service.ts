@@ -3,30 +3,29 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Injectable, forwardRef, Inject, OnDestroy } from '@angular/core';
+import { Injectable, forwardRef, Inject } from '@angular/core';
 import { Subject } from 'rxjs/Subject';
 
 import { DashboardServiceInterface } from './dashboardServiceInterface.service';
+import { CommonServiceInterface } from 'sql/services/common/commonServiceInterface.service';
 import { MenuItem, IBreadcrumbService } from 'sql/base/browser/ui/breadcrumb/interfaces';
-import { ConnectionProfile } from 'sql/parts/connection/common/connectionProfile';
+import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
 
-import { IDisposable, dispose } from 'vs/base/common/lifecycle';
 import * as nls from 'vs/nls';
 
 export enum BreadcrumbClass {
 	DatabasePage,
 	ServerPage
-};
+}
 
 @Injectable()
-export class BreadcrumbService implements IBreadcrumbService, OnDestroy {
+export class BreadcrumbService implements IBreadcrumbService {
 	public breadcrumbItem: Subject<MenuItem[]>;
 	private itemBreadcrums: MenuItem[];
-	private _disposables: IDisposable[] = [];
 	private _currentPage: BreadcrumbClass;
 
-	constructor( @Inject(forwardRef(() => DashboardServiceInterface)) private _bootstrap: DashboardServiceInterface) {
-		_bootstrap.onUpdatePage(() => {
+	constructor( @Inject(forwardRef(() => CommonServiceInterface)) private commonService: DashboardServiceInterface) {
+		this.commonService.onUpdatePage(() => {
 			this.setBreadcrumbs(this._currentPage);
 		});
 		this.breadcrumbItem = new Subject<MenuItem[]>();
@@ -41,8 +40,8 @@ export class BreadcrumbService implements IBreadcrumbService, OnDestroy {
 
 	private getBreadcrumbsLink(page: BreadcrumbClass): MenuItem[] {
 		this.itemBreadcrums = [];
-		let profile = this._bootstrap.connectionManagementService.connectionInfo.connectionProfile;
-		this.itemBreadcrums.push({ label: nls.localize('homeCrumb', 'Home')});
+		let profile = this.commonService.connectionManagementService.connectionInfo.connectionProfile;
+		this.itemBreadcrums.push({ label: nls.localize('homeCrumb', 'Home') });
 		switch (page) {
 			case BreadcrumbClass.DatabasePage:
 				this.itemBreadcrums.push(this.getServerBreadcrumb(profile));
@@ -58,7 +57,7 @@ export class BreadcrumbService implements IBreadcrumbService, OnDestroy {
 	}
 
 	private getServerBreadcrumb(profile: ConnectionProfile): MenuItem {
-		return { label: profile.serverName, routerLink: ['server-dashboard'] };
+		return profile.connectionName ? { label: profile.connectionName, routerLink: ['server-dashboard'] } : { label: profile.serverName, routerLink: ['server-dashboard'] };
 	}
 
 	private getDbBreadcrumb(profile: ConnectionProfile): MenuItem {
@@ -66,9 +65,5 @@ export class BreadcrumbService implements IBreadcrumbService, OnDestroy {
 			label: profile.databaseName ? profile.databaseName : 'database-name',
 			routerLink: ['database-dashboard']
 		};
-	}
-
-	ngOnDestroy() {
-		this._disposables = dispose(this._disposables);
 	}
 }

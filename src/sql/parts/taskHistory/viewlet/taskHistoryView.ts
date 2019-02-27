@@ -8,7 +8,7 @@ import errors = require('vs/base/common/errors');
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import Severity from 'vs/base/common/severity';
 import { Tree } from 'vs/base/parts/tree/browser/treeImpl';
-import * as builder from 'vs/base/browser/builder';
+import * as builder from 'sql/base/browser/builder';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { attachListStyler } from 'vs/platform/theme/common/styler';
 import { ITree } from 'vs/base/parts/tree/browser/tree';
@@ -20,9 +20,9 @@ import { TaskHistoryRenderer } from 'sql/parts/taskHistory/viewlet/taskHistoryRe
 import { TaskHistoryDataSource } from 'sql/parts/taskHistory/viewlet/taskHistoryDataSource';
 import { TaskHistoryController } from 'sql/parts/taskHistory/viewlet/taskHistoryController';
 import { TaskHistoryActionProvider } from 'sql/parts/taskHistory/viewlet/taskHistoryActionProvider';
-import { ITaskService } from 'sql/parts/taskHistory/common/taskService';
+import { ITaskService } from 'sql/platform/taskHistory/common/taskService';
 import { TaskNode, TaskStatus } from 'sql/parts/taskHistory/common/taskNode';
-import { IErrorMessageService } from 'sql/parts/connection/common/connectionManagement';
+import { IErrorMessageService } from 'sql/platform/errorMessage/common/errorMessageService';
 
 const $ = builder.$;
 
@@ -94,7 +94,7 @@ export class TaskHistoryView {
 		}, {
 				indentPixels: 10,
 				twistiePixels: 20,
-				ariaLabel: nls.localize({ key: 'regTreeAriaLabel', comment: ['TaskHistory'] }, 'Task history')
+				ariaLabel: nls.localize({ key: 'taskHistory.regTreeAriaLabel', comment: ['TaskHistory'] }, 'Task history')
 			});
 	}
 
@@ -107,7 +107,7 @@ export class TaskHistoryView {
 		let targetsToExpand: any[];
 
 		// Focus
-		this._tree.DOMFocus();
+		this._tree.domFocus();
 
 		if (this._tree) {
 			let selection = this._tree.getSelection();
@@ -141,9 +141,9 @@ export class TaskHistoryView {
 			let isMouseOrigin = event.payload && (event.payload.origin === 'mouse');
 			let isDoubleClick = isMouseOrigin && event.payload.originalEvent && event.payload.originalEvent.detail === 2;
 			if (isDoubleClick) {
-				if (task.status === TaskStatus.failed) {
+				if (task.status === TaskStatus.Failed) {
 					var err = task.taskName + ': ' + task.message;
-					this._errorMessageService.showDialog(Severity.Error, nls.localize('taskError','Task error'), err);
+					this._errorMessageService.showDialog(Severity.Error, nls.localize('taskError', 'Task error'), err);
 				}
 			}
 		}

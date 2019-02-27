@@ -8,11 +8,11 @@
 import * as assert from 'assert';
 import * as sqlops from 'sqlops';
 import * as TypeMoq from 'typemoq';
-import AccountStore from 'sql/services/accountManagement/accountStore';
+import AccountStore from 'sql/platform/accountManagement/common/accountStore';
 import { AccountDialogController } from 'sql/parts/accountManagement/accountDialog/accountDialogController';
-import { AccountManagementService } from 'sql/services/accountManagement/accountManagementService';
-import { AccountAdditionResult, AccountProviderAddedEventParams, UpdateAccountListEventParams } from 'sql/services/accountManagement/eventTypes';
-import { IAccountStore } from 'sql/services/accountManagement/interfaces';
+import { AccountManagementService } from 'sql/workbench/services/accountManagement/browser/accountManagementService';
+import { AccountAdditionResult, AccountProviderAddedEventParams, UpdateAccountListEventParams } from 'sql/platform/accountManagement/common/eventTypes';
+import { IAccountStore } from 'sql/platform/accountManagement/common/interfaces';
 import { AccountProviderStub } from 'sqltest/stubs/accountManagementStubs';
 import { EventVerifierSingle } from 'sqltest/utils/eventVerifier';
 import { InstantiationService } from 'vs/platform/instantiation/common/instantiationService';
@@ -109,7 +109,6 @@ suite('Account Management Service Tests:', () => {
 			provider: mockProvider.object,
 			metadata: hasAccountProvider
 		};
-
 		// If: I update an account that exists
 		state.accountManagementService.accountUpdated(account)
 			.then(() => {
@@ -221,13 +220,13 @@ suite('Account Management Service Tests:', () => {
 		let ams = getTestState().accountManagementService;
 
 		// If: I add an account when the provider doesn't exist
-		// Then: It should be rejected
-		ams.addAccount('doesNotExist')
-			.then(
-			() => done('Promise resolved when it should have rejected'),
-			() => done()
-			);
-
+		// Then: It should not resolve
+		Promise.race([
+			new Promise((resolve, reject) => setTimeout(() => resolve(), 100)),
+			ams.addAccount('doesNotExist').then((
+				() => done('Promise resolved when the provider did not exist')
+			))
+		]).then(() => done(), err => done(err));
 	});
 
 	test('Add account - provider exists, provider fails', done => {
@@ -305,12 +304,13 @@ suite('Account Management Service Tests:', () => {
 		let ams = getTestState().accountManagementService;
 
 		// If: I get accounts when the provider doesn't exist
-		// Then: It should be rejected
-		ams.getAccountsForProvider('doesNotExist')
-			.then(
-			() => done('Promise resolved when it should have rejected'),
-			() => done()
-			);
+		// Then: It should not resolve
+		Promise.race([
+			new Promise((resolve, reject) => setTimeout(() => resolve(), 100)),
+			ams.getAccountsForProvider('doesNotExist').then((
+				() => done('Promise resolved when the provider did not exist')
+			))
+		]).then(() => done(), err => done(err));
 	});
 
 	test('Get accounts by provider - provider exists, no accounts', done => {

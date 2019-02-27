@@ -2,14 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
 import * as assert from 'assert';
 import { TrimTrailingWhitespaceCommand, trimTrailingWhitespace } from 'vs/editor/common/commands/trimTrailingWhitespaceCommand';
-import { Selection } from 'vs/editor/common/core/selection';
 import { Position } from 'vs/editor/common/core/position';
 import { Range } from 'vs/editor/common/core/range';
-import { IIdentifiedSingleEditOperation } from 'vs/editor/common/editorCommon';
+import { Selection } from 'vs/editor/common/core/selection';
+import { IIdentifiedSingleEditOperation } from 'vs/editor/common/model';
 import { getEditOperation } from 'vs/editor/test/browser/testCommand';
 import { withEditorModel } from 'vs/editor/test/common/editorTestUtils';
 
@@ -18,10 +17,8 @@ import { withEditorModel } from 'vs/editor/test/common/editorTestUtils';
  */
 function createInsertDeleteSingleEditOp(text: string, positionLineNumber: number, positionColumn: number, selectionLineNumber: number = positionLineNumber, selectionColumn: number = positionColumn): IIdentifiedSingleEditOperation {
 	return {
-		identifier: null,
 		range: new Range(selectionLineNumber, selectionColumn, positionLineNumber, positionColumn),
-		text: text,
-		forceMoveMarkers: true
+		text: text
 	};
 }
 
@@ -30,24 +27,22 @@ function createInsertDeleteSingleEditOp(text: string, positionLineNumber: number
  */
 export function createSingleEditOp(text: string, positionLineNumber: number, positionColumn: number, selectionLineNumber: number = positionLineNumber, selectionColumn: number = positionColumn): IIdentifiedSingleEditOperation {
 	return {
-		identifier: null,
 		range: new Range(selectionLineNumber, selectionColumn, positionLineNumber, positionColumn),
-		text: text,
-		forceMoveMarkers: false
+		text: text
 	};
 }
 
 function assertTrimTrailingWhitespaceCommand(text: string[], expected: IIdentifiedSingleEditOperation[]): void {
 	return withEditorModel(text, (model) => {
-		var op = new TrimTrailingWhitespaceCommand(new Selection(1, 1, 1, 1), []);
-		var actual = getEditOperation(model, op);
+		let op = new TrimTrailingWhitespaceCommand(new Selection(1, 1, 1, 1), []);
+		let actual = getEditOperation(model, op);
 		assert.deepEqual(actual, expected);
 	});
 }
 
 function assertTrimTrailingWhitespace(text: string[], cursors: Position[], expected: IIdentifiedSingleEditOperation[]): void {
 	return withEditorModel(text, (model) => {
-		var actual = trimTrailingWhitespace(model, cursors);
+		let actual = trimTrailingWhitespace(model, cursors);
 		assert.deepEqual(actual, expected);
 	});
 }

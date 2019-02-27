@@ -1,16 +1,16 @@
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 'use strict';
-import { WebViewDialog } from 'sql/base/browser/ui/modal/webViewDialog';
+import 'vs/css!sql/media/icons/common-icons';
 
+import { WebViewDialog } from 'sql/workbench/parts/webview/electron-browser/webViewDialog';
 import { MainThreadModalDialogShape, SqlMainContext, SqlExtHostContext, ExtHostModalDialogsShape } from 'sql/workbench/api/node/sqlExtHost.protocol';
+
 import { IExtHostContext } from 'vs/workbench/api/node/extHost.protocol';
 import { extHostNamedCustomer } from 'vs/workbench/api/electron-browser/extHostCustomers';
-import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
-import 'vs/css!sql/media/icons/common-icons';
 
 @extHostNamedCustomer(SqlMainContext.MainThreadModalDialog)
 export class MainThreadModalDialog implements MainThreadModalDialogShape {
@@ -19,10 +19,9 @@ export class MainThreadModalDialog implements MainThreadModalDialogShape {
 
 	constructor(
 		context: IExtHostContext,
-		@IWorkbenchEditorService private readonly _editorService: IWorkbenchEditorService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
-		this._proxy = context.get(SqlExtHostContext.ExtHostModalDialogs);
+		this._proxy = context.getProxy(SqlExtHostContext.ExtHostModalDialogs);
 	}
 
 	dispose(): void {

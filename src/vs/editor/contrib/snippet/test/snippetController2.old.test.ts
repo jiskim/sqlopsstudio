@@ -2,8 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
-
 import * as assert from 'assert';
 import { Position } from 'vs/editor/common/core/position';
 import { Selection } from 'vs/editor/common/core/selection';
@@ -12,15 +10,15 @@ import { TestCodeEditor, withTestCodeEditor } from 'vs/editor/test/browser/testC
 import { Cursor } from 'vs/editor/common/controller/cursor';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { ICodeEditor } from 'vs/editor/browser/editorBrowser';
-import { NoopLogService } from 'vs/platform/log/common/log';
+import { NullLogService } from 'vs/platform/log/common/log';
 
 class TestSnippetController extends SnippetController2 {
 
 	constructor(
 		editor: ICodeEditor,
-		@IContextKeyService private _contextKeyService: IContextKeyService
+		@IContextKeyService private readonly _contextKeyService: IContextKeyService
 	) {
-		super(editor, new NoopLogService(), _contextKeyService);
+		super(editor, new NullLogService(), _contextKeyService);
 	}
 
 	isInSnippetMode(): boolean {

@@ -10,24 +10,24 @@ import {
 	SqlExtHostContext, ExtHostDataProtocolShape,
 	MainThreadDataProtocolShape, SqlMainContext
 } from 'sql/workbench/api/node/sqlExtHost.protocol';
-import { IConnectionManagementService } from 'sql/parts/connection/common/connectionManagement';
-import { ICapabilitiesService } from 'sql/services/capabilities/capabilitiesService';
-import { IQueryManagementService } from 'sql/parts/query/common/queryManagement';
+import { IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
+import { ICapabilitiesService } from 'sql/platform/capabilities/common/capabilitiesService';
+import { IQueryManagementService } from 'sql/platform/query/common/queryManagement';
 import * as sqlops from 'sqlops';
-import { IMetadataService } from 'sql/services/metadata/metadataService';
-import { IObjectExplorerService } from 'sql/parts/registeredServer/common/objectExplorerService';
-import { IScriptingService } from 'sql/services/scripting/scriptingService';
-import { IAdminService } from 'sql/parts/admin/common/adminService';
-import { IBackupService } from 'sql/parts/disasterRecovery/backup/common/backupService';
-import { IRestoreService } from 'sql/parts/disasterRecovery/restore/common/restoreService';
-import { ITaskService } from 'sql/parts/taskHistory/common/taskService';
-import { IProfilerService } from 'sql/parts/profiler/service/interfaces';
-import { ISerializationService } from 'sql/services/serialization/serializationService';
-import { IFileBrowserService } from 'sql/parts/fileBrowser/common/interfaces';
+import { IMetadataService } from 'sql/platform/metadata/common/metadataService';
+import { IObjectExplorerService, NodeExpandInfoWithProviderId } from 'sql/workbench/services/objectExplorer/common/objectExplorerService';
+import { IScriptingService } from 'sql/platform/scripting/common/scriptingService';
+import { IAdminService } from 'sql/workbench/services/admin/common/adminService';
+import { IJobManagementService } from 'sql/platform/jobManagement/common/interfaces';
+import { IBackupService } from 'sql/platform/backup/common/backupService';
+import { IRestoreService } from 'sql/platform/restore/common/restoreService';
+import { ITaskService } from 'sql/platform/taskHistory/common/taskService';
+import { IProfilerService } from 'sql/workbench/services/profiler/common/interfaces';
+import { ISerializationService } from 'sql/platform/serialization/common/serializationService';
+import { IFileBrowserService } from 'sql/platform/fileBrowser/common/interfaces';
 import { IExtHostContext } from 'vs/workbench/api/node/extHost.protocol';
+import { IDacFxService } from 'sql/platform/dacfx/common/dacFxService';
 import { extHostNamedCustomer } from 'vs/workbench/api/electron-browser/extHostCustomers';
-import { IMessageService } from 'vs/platform/message/common/message';
-import severity from 'vs/base/common/severity';
 
 /**
  * Main thread class for handling data protocol management registration.
@@ -50,16 +50,17 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 		@IObjectExplorerService private _objectExplorerService: IObjectExplorerService,
 		@IScriptingService private _scriptingService: IScriptingService,
 		@IAdminService private _adminService: IAdminService,
+		@IJobManagementService private _jobManagementService: IJobManagementService,
 		@IBackupService private _backupService: IBackupService,
 		@IRestoreService private _restoreService: IRestoreService,
 		@ITaskService private _taskService: ITaskService,
 		@IProfilerService private _profilerService: IProfilerService,
 		@ISerializationService private _serializationService: ISerializationService,
 		@IFileBrowserService private _fileBrowserService: IFileBrowserService,
-		@IMessageService private _messageService: IMessageService
+		@IDacFxService private _dacFxService: IDacFxService,
 	) {
 		if (extHostContext) {
-			this._proxy = extHostContext.get(SqlExtHostContext.ExtHostDataProtocol);
+			this._proxy = extHostContext.getProxy(SqlExtHostContext.ExtHostDataProtocol);
 		}
 		if (this._connectionManagementService) {
 			this._connectionManagementService.onLanguageFlavorChanged(e => this._proxy.$languageFlavorChanged(e), this, this._toDispose);
@@ -88,6 +89,12 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 			listDatabases(connectionUri: string): Thenable<sqlops.ListDatabasesResult> {
 				return self._proxy.$listDatabases(handle, connectionUri);
 			},
+			getConnectionString(connectionUri: string, includePassword: boolean): Thenable<string> {
+				return self._proxy.$getConnectionString(handle, connectionUri, includePassword);
+			},
+			buildConnectionInfo(connectionString: string): Thenable<sqlops.ConnectionInfo> {
+				return self._proxy.$buildConnectionInfo(handle, connectionString);
+			},
 			rebuildIntelliSenseCache(connectionUri: string): Thenable<void> {
 				return self._proxy.$rebuildIntelliSenseCache(handle, connectionUri);
 			}
@@ -114,6 +121,9 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 			runQueryAndReturn(ownerUri: string, queryString: string): Thenable<sqlops.SimpleExecuteResult> {
 				return self._proxy.$runQueryAndReturn(handle, ownerUri, queryString);
 			},
+			parseSyntax(ownerUri: string, query: string): Thenable<sqlops.SyntaxParseResult> {
+				return self._proxy.$parseSyntax(handle, ownerUri, query);
+			},
 			getQueryRows(rowData: sqlops.QueryExecuteSubsetParams): Thenable<sqlops.QueryExecuteSubsetResult> {
 				return self._proxy.$getQueryRows(handle, rowData);
 			},
@@ -132,8 +142,8 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 					return self._serializationService.saveAs(requestParams.resultFormat, requestParams.filePath, undefined, true);
 				}
 			},
-			initializeEdit(ownerUri: string, schemaName: string, objectName: string, objectType: string, rowLimit: number): Thenable<void> {
-				return self._proxy.$initializeEdit(handle, ownerUri, schemaName, objectName, objectType, rowLimit);
+			initializeEdit(ownerUri: string, schemaName: string, objectName: string, objectType: string, rowLimit: number, queryString: string): Thenable<void> {
+				return self._proxy.$initializeEdit(handle, ownerUri, schemaName, objectName, objectType, rowLimit, queryString);
 			},
 			updateCell(ownerUri: string, rowId: number, columnId: number, newValue: string): Thenable<sqlops.EditUpdateCellResult> {
 				return self._proxy.$updateCell(handle, ownerUri, rowId, columnId, newValue);
@@ -221,6 +231,7 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 	public $registerObjectExplorerProvider(providerId: string, handle: number): TPromise<any> {
 		const self = this;
 		this._objectExplorerService.registerProvider(providerId, <sqlops.ObjectExplorerProvider>{
+			providerId: providerId,
 			createNewSession(connection: sqlops.ConnectionInfo): Thenable<sqlops.ObjectExplorerSessionResponse> {
 				return self._proxy.$createObjectExplorerSession(handle, connection);
 			},
@@ -232,6 +243,35 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 			},
 			closeSession(closeSessionInfo: sqlops.ObjectExplorerCloseSessionInfo): Thenable<sqlops.ObjectExplorerCloseSessionResponse> {
 				return self._proxy.$closeObjectExplorerSession(handle, closeSessionInfo);
+			},
+			findNodes(findNodesInfo: sqlops.FindNodesInfo): Thenable<sqlops.ObjectExplorerFindNodesResponse> {
+				return self._proxy.$findNodes(handle, findNodesInfo);
+			}
+		});
+
+		return undefined;
+	}
+
+	public $registerObjectExplorerNodeProvider(providerId: string, supportedProviderId: string, group: string, handle: number): TPromise<any> {
+		const self = this;
+		this._objectExplorerService.registerNodeProvider(<sqlops.ObjectExplorerNodeProvider> {
+			supportedProviderId: supportedProviderId,
+			providerId: providerId,
+			group: group,
+			expandNode(nodeInfo: sqlops.ExpandNodeInfo): Thenable<boolean> {
+				return self._proxy.$expandObjectExplorerNode(handle, nodeInfo);
+			},
+			refreshNode(nodeInfo: sqlops.ExpandNodeInfo): Thenable<boolean> {
+				return self._proxy.$refreshObjectExplorerNode(handle, nodeInfo);
+			},
+			findNodes(findNodesInfo: sqlops.FindNodesInfo): Thenable<sqlops.ObjectExplorerFindNodesResponse> {
+				return self._proxy.$findNodes(handle, findNodesInfo);
+			},
+			handleSessionOpen(session: sqlops.ObjectExplorerSession): Thenable<boolean> {
+				return self._proxy.$createObjectExplorerNodeProviderSession(handle, session);
+			},
+			handleSessionClose(closeSessionInfo: sqlops.ObjectExplorerCloseSessionInfo): void {
+				return self._proxy.$handleSessionClose(handle, closeSessionInfo);
 			}
 		});
 
@@ -286,20 +326,26 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 	public $registerProfilerProvider(providerId: string, handle: number): TPromise<any> {
 		const self = this;
 		this._profilerService.registerProvider(providerId, <sqlops.ProfilerProvider>{
-			startSession(sessionId: string): Thenable<boolean> {
-				return self._proxy.$startSession(handle, sessionId);
+			createSession(sessionId: string, createStatement: string, template: sqlops.ProfilerSessionTemplate): Thenable<boolean> {
+				return self._proxy.$createSession(handle, sessionId, createStatement, template);
+			},
+			startSession(sessionId: string, sessionName: string): Thenable<boolean> {
+				return self._proxy.$startSession(handle, sessionId, sessionName);
 			},
 			stopSession(sessionId: string): Thenable<boolean> {
 				return self._proxy.$stopSession(handle, sessionId);
 			},
 			pauseSession(sessionId: string): Thenable<boolean> {
-				return TPromise.as(true);
+				return self._proxy.$pauseSession(handle, sessionId);
+			},
+			getXEventSessions(sessionId: string): Thenable<string[]> {
+				return self._proxy.$getXEventSessions(handle, sessionId);
 			},
 			connectSession(sessionId: string): Thenable<boolean> {
 				return TPromise.as(true);
 			},
 			disconnectSession(sessionId: string): Thenable<boolean> {
-				return TPromise.as(true);
+				return self._proxy.$disconnectSession(handle, sessionId);
 			}
 		});
 
@@ -326,11 +372,82 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 		return undefined;
 	}
 
+	public $registerAgentServicesProvider(providerId: string, handle: number): TPromise<any> {
+		const self = this;
+		this._jobManagementService.registerProvider(providerId, <sqlops.AgentServicesProvider>{
+			providerId: providerId,
+			getJobs(connectionUri: string): Thenable<sqlops.AgentJobsResult> {
+				return self._proxy.$getJobs(handle, connectionUri);
+			},
+			getJobHistory(connectionUri: string, jobID: string, jobName: string): Thenable<sqlops.AgentJobHistoryResult> {
+				return self._proxy.$getJobHistory(handle, connectionUri, jobID, jobName);
+			},
+			jobAction(connectionUri: string, jobName: string, action: string): Thenable<sqlops.ResultStatus> {
+				return self._proxy.$jobAction(handle, connectionUri, jobName, action);
+			},
+			deleteJob(connectionUri: string, jobInfo: sqlops.AgentJobInfo): Thenable<sqlops.ResultStatus> {
+				return self._proxy.$deleteJob(handle, connectionUri, jobInfo);
+			},
+			deleteJobStep(connectionUri: string, stepInfo: sqlops.AgentJobStepInfo): Thenable<sqlops.ResultStatus> {
+				return self._proxy.$deleteJobStep(handle, connectionUri, stepInfo);
+			},
+			getAlerts(connectionUri: string): Thenable<sqlops.AgentAlertsResult> {
+				return self._proxy.$getAlerts(handle, connectionUri);
+			},
+			deleteAlert(connectionUri: string, alertInfo: sqlops.AgentAlertInfo): Thenable<sqlops.ResultStatus> {
+				return self._proxy.$deleteAlert(handle, connectionUri, alertInfo);
+			},
+			getOperators(connectionUri: string): Thenable<sqlops.AgentOperatorsResult> {
+				return self._proxy.$getOperators(handle, connectionUri);
+			},
+			deleteOperator(connectionUri: string, operatorInfo: sqlops.AgentOperatorInfo): Thenable<sqlops.ResultStatus> {
+				return self._proxy.$deleteOperator(handle, connectionUri, operatorInfo);
+			},
+			getProxies(connectionUri: string): Thenable<sqlops.AgentProxiesResult> {
+				return self._proxy.$getProxies(handle, connectionUri);
+			},
+			deleteProxy(connectionUri: string, proxyInfo: sqlops.AgentProxyInfo): Thenable<sqlops.ResultStatus> {
+				return self._proxy.$deleteProxy(handle, connectionUri, proxyInfo);
+			},
+			getCredentials(connectionUri: string): Thenable<sqlops.GetCredentialsResult> {
+				return self._proxy.$getCredentials(handle, connectionUri);
+			}
+		});
+
+		return undefined;
+	}
+
 	public $registerCapabilitiesServiceProvider(providerId: string, handle: number): TPromise<any> {
 		const self = this;
 		this._capabilitiesService.registerProvider(<sqlops.CapabilitiesProvider>{
 			getServerCapabilities(client: sqlops.DataProtocolClientCapabilities): Thenable<sqlops.DataProtocolServerCapabilities> {
 				return self._proxy.$getServerCapabilities(handle, client);
+			}
+		});
+
+		return undefined;
+	}
+
+	public $registerDacFxServicesProvider(providerId: string, handle: number): TPromise<any> {
+		const self = this;
+		this._dacFxService.registerProvider(providerId, <sqlops.DacFxServicesProvider>{
+			exportBacpac(databaseName: string, packageFilePath: string, ownerUri: string, taskExecutionMode: sqlops.TaskExecutionMode): Thenable<sqlops.DacFxResult> {
+				return self._proxy.$exportBacpac(handle, databaseName, packageFilePath, ownerUri, taskExecutionMode);
+			},
+			importBacpac(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: sqlops.TaskExecutionMode): Thenable<sqlops.DacFxResult> {
+				return self._proxy.$importBacpac(handle, packageFilePath, databaseName, ownerUri, taskExecutionMode);
+			},
+			extractDacpac(databaseName: string, packageFilePath: string, applicationName: string, applicationVersion: string, ownerUri: string, taskExecutionMode: sqlops.TaskExecutionMode): Thenable<sqlops.DacFxResult> {
+				return self._proxy.$extractDacpac(handle, databaseName, packageFilePath, applicationName, applicationVersion, ownerUri, taskExecutionMode);
+			},
+			deployDacpac(packageFilePath: string, databaseName: string, upgradeExisting: boolean, ownerUri: string, taskExecutionMode: sqlops.TaskExecutionMode): Thenable<sqlops.DacFxResult> {
+				return self._proxy.$deployDacpac(handle, packageFilePath, databaseName, upgradeExisting, ownerUri, taskExecutionMode);
+			},
+			generateDeployScript(packageFilePath: string, databaseName: string, scriptFilePath: string, ownerUri: string, taskExecutionMode: sqlops.TaskExecutionMode): Thenable<sqlops.DacFxResult> {
+				return self._proxy.$generateDeployScript(handle, packageFilePath, databaseName, scriptFilePath, ownerUri, taskExecutionMode);
+			},
+			generateDeployPlan(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: sqlops.TaskExecutionMode): Thenable<sqlops.GenerateDeployPlanResult> {
+				return self._proxy.$generateDeployPlan(handle, packageFilePath, databaseName, ownerUri, taskExecutionMode);
 			}
 		});
 
@@ -360,8 +477,11 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 	public $onBatchComplete(handle: number, batchInfo: sqlops.QueryExecuteBatchNotificationParams): void {
 		this._queryManagementService.onBatchComplete(batchInfo);
 	}
-	public $onResultSetComplete(handle: number, resultSetInfo: sqlops.QueryExecuteResultSetCompleteNotificationParams): void {
-		this._queryManagementService.onResultSetComplete(resultSetInfo);
+	public $onResultSetAvailable(handle: number, resultSetInfo: sqlops.QueryExecuteResultSetNotificationParams): void {
+		this._queryManagementService.onResultSetAvailable(resultSetInfo);
+	}
+	public $onResultSetUpdated(handle: number, resultSetInfo: sqlops.QueryExecuteResultSetNotificationParams): void {
+		this._queryManagementService.onResultSetUpdated(resultSetInfo);
 	}
 	public $onQueryMessage(handle: number, message: sqlops.QueryExecuteMessageParams): void {
 		this._queryManagementService.onMessage(message);
@@ -380,8 +500,13 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 		this._objectExplorerService.onSessionCreated(handle, sessionResponse);
 	}
 
-	public $onObjectExplorerNodeExpanded(handle: number, expandResponse: sqlops.ObjectExplorerExpandInfo): void {
-		this._objectExplorerService.onNodeExpanded(handle, expandResponse);
+	public $onObjectExplorerSessionDisconnected(handle: number, sessionResponse: sqlops.ObjectExplorerSession): void {
+		this._objectExplorerService.onSessionDisconnected(handle, sessionResponse);
+	}
+
+	public $onObjectExplorerNodeExpanded(providerId: string, expandResponse: sqlops.ObjectExplorerExpandInfo): void {
+		let expandInfo: NodeExpandInfoWithProviderId = Object.assign({ providerId: providerId }, expandResponse);
+		this._objectExplorerService.onNodeExpanded(expandInfo);
 	}
 
 	//Tasks handlers
@@ -409,6 +534,19 @@ export class MainThreadDataProtocol implements MainThreadDataProtocolShape {
 	// Profiler handlers
 	public $onSessionEventsAvailable(handle: number, response: sqlops.ProfilerSessionEvents): void {
 		this._profilerService.onMoreRows(response);
+	}
+
+	public $onSessionStopped(handle: number, response: sqlops.ProfilerSessionStoppedParams): void {
+		this._profilerService.onSessionStopped(response);
+	}
+
+	public $onProfilerSessionCreated(handle: number, response: sqlops.ProfilerSessionCreatedParams): void {
+		this._profilerService.onProfilerSessionCreated(response);
+	}
+
+	// SQL Server Agent handlers
+	public $onJobDataUpdated(handle: Number): void {
+		this._jobManagementService.fireOnDidChange();
 	}
 
 	public $unregisterProvider(handle: number): TPromise<any> {

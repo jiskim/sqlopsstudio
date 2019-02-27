@@ -4,18 +4,22 @@
  *--------------------------------------------------------------------------------------------*/
 
 import 'vs/css!sql/parts/query/editor/media/queryEditor';
+
 import { TPromise } from 'vs/base/common/winjs.base';
-import { Dimension, Builder } from 'vs/base/browser/builder';
+import { Dimension } from 'vs/base/browser/dom';
 import { EditorOptions } from 'vs/workbench/common/editor';
 import { BaseEditor } from 'vs/workbench/browser/parts/editor/baseEditor';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+
 import { TaskDialogInput } from './taskDialogInput';
-import { IBootstrapService } from 'sql/services/bootstrap/bootstrapService';
-import { TaskDialogComponentParams } from 'sql/services/bootstrap/bootstrapParams';
+import { ITaskDialogComponentParams } from 'sql/services/bootstrap/bootstrapParams';
 import { TaskDialogModule } from 'sql/parts/tasks/dialog/taskDialog.module';
 import { TASKDIALOG_SELECTOR } from 'sql/parts/tasks/dialog/taskDialog.component';
+import { bootstrapAngular } from 'sql/services/bootstrap/bootstrapService';
+import { CancellationToken } from 'vs/base/common/cancellation';
+import { IStorageService } from 'vs/platform/storage/common/storage';
 
 export class TaskDialogEditor extends BaseEditor {
 
@@ -25,15 +29,15 @@ export class TaskDialogEditor extends BaseEditor {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IThemeService themeService: IThemeService,
 		@IInstantiationService private instantiationService: IInstantiationService,
-		@IBootstrapService private _bootstrapService: IBootstrapService
+		@IStorageService storageService: IStorageService
 	) {
-		super(TaskDialogEditor.ID, telemetryService, themeService);
+		super(TaskDialogEditor.ID, telemetryService, themeService, storageService);
 	}
 
 	/**
-	 * Called to create the editor in the parent builder.
+	 * Called to create the editor in the parent element.
 	 */
-	public createEditor(parent: Builder): void {
+	public createEditor(parent: HTMLElement): void {
 	}
 
 	/**
@@ -49,7 +53,7 @@ export class TaskDialogEditor extends BaseEditor {
 	public layout(dimension: Dimension): void {
 	}
 
-	public setInput(input: TaskDialogInput, options: EditorOptions): TPromise<void> {
+	public setInput(input: TaskDialogInput, options: EditorOptions): Thenable<void> {
 		if (this.input instanceof TaskDialogInput && this.input.matches(input)) {
 			return TPromise.as(undefined);
 		}
@@ -57,9 +61,9 @@ export class TaskDialogEditor extends BaseEditor {
 		if (!input.hasInitialized) {
 			this.bootstrapAngular(input);
 		}
-		this.revealElementWithTagName(input.uniqueSelector, this.getContainer().getHTMLElement());
+		this.revealElementWithTagName(input.uniqueSelector, this.getContainer());
 
-		return super.setInput(input, options);
+		return super.setInput(input, options, CancellationToken.None);
 	}
 
 	/**
@@ -68,7 +72,7 @@ export class TaskDialogEditor extends BaseEditor {
 	private revealElementWithTagName(tagName: string, parent: HTMLElement): void {
 		let elementToReveal: HTMLElement;
 
-		for(let i = 0; i < parent.children.length; i++) {
+		for (let i = 0; i < parent.children.length; i++) {
 			let child: HTMLElement = <HTMLElement>parent.children[i];
 			if (child.tagName && child.tagName.toLowerCase() === tagName && !elementToReveal) {
 				elementToReveal = child;
@@ -88,12 +92,12 @@ export class TaskDialogEditor extends BaseEditor {
 	private bootstrapAngular(input: TaskDialogInput): void {
 
 		// Get the bootstrap params and perform the bootstrap
-		let params: TaskDialogComponentParams = {
+		let params: ITaskDialogComponentParams = {
 			ownerUri: input.getUri()
 		};
-		let uniqueSelector = this._bootstrapService.bootstrap(
+		let uniqueSelector = bootstrapAngular(this.instantiationService,
 			TaskDialogModule,
-			this.getContainer().getHTMLElement(),
+			this.getContainer(),
 			TASKDIALOG_SELECTOR,
 			params);
 		input.setUniqueSelector(uniqueSelector);

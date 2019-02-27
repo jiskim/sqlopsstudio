@@ -2,17 +2,17 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
-
 import * as assert from 'assert';
-import { withTestCodeEditor, TestCodeEditor } from 'vs/editor/test/browser/testCodeEditor';
-import { Selection } from 'vs/editor/common/core/selection';
+import { Event } from 'vs/base/common/event';
 import { Range } from 'vs/editor/common/core/range';
-import { InsertCursorAbove, InsertCursorBelow, MultiCursorSelectionController, SelectHighlightsAction, AddSelectionToNextFindMatchAction } from 'vs/editor/contrib/multicursor/multicursor';
-import { Handler, EndOfLineSequence } from 'vs/editor/common/editorCommon';
-import { IStorageService } from 'vs/platform/storage/common/storage';
-import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
+import { Selection } from 'vs/editor/common/core/selection';
+import { Handler } from 'vs/editor/common/editorCommon';
+import { EndOfLineSequence } from 'vs/editor/common/model';
 import { CommonFindController } from 'vs/editor/contrib/find/findController';
+import { AddSelectionToNextFindMatchAction, InsertCursorAbove, InsertCursorBelow, MultiCursorSelectionController, SelectHighlightsAction } from 'vs/editor/contrib/multicursor/multicursor';
+import { TestCodeEditor, withTestCodeEditor } from 'vs/editor/test/browser/testCodeEditor';
+import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
+import { IStorageService } from 'vs/platform/storage/common/storage';
 
 suite('Multicursor', () => {
 
@@ -27,7 +27,13 @@ suite('Multicursor', () => {
 			addCursorUpAction.run(null, editor, {});
 			assert.equal(cursor.getSelections().length, 2);
 
-			editor.trigger('test', Handler.Paste, { text: '1\n2' });
+			editor.trigger('test', Handler.Paste, {
+				text: '1\n2',
+				multicursorText: [
+					'1',
+					'2'
+				]
+			});
 			// cursorCommand(cursor, H.Paste, { text: '1\n2' });
 			assert.equal(editor.getModel().getLineContent(1), '1abc');
 			assert.equal(editor.getModel().getLineContent(2), '2def');
@@ -54,9 +60,14 @@ suite('Multicursor selection', () => {
 	let queryState: { [key: string]: any; } = {};
 	let serviceCollection = new ServiceCollection();
 	serviceCollection.set(IStorageService, {
+		_serviceBrand: undefined,
+		onDidChangeStorage: Event.None,
+		onWillSaveState: Event.None,
 		get: (key: string) => queryState[key],
 		getBoolean: (key: string) => !!queryState[key],
-		store: (key: string, value: any) => { queryState[key] = value; }
+		getInteger: (key: string) => undefined,
+		store: (key: string, value: any) => { queryState[key] = value; return Promise.resolve(); },
+		remove: (key) => void 0
 	} as IStorageService);
 
 	test('issue #8817: Cursor position changes when you cancel multicursor', () => {
@@ -99,8 +110,6 @@ suite('Multicursor selection', () => {
 			let findController = editor.registerAndInstantiateContribution<CommonFindController>(CommonFindController);
 			let multiCursorSelectController = editor.registerAndInstantiateContribution<MultiCursorSelectionController>(MultiCursorSelectionController);
 			let selectHighlightsAction = new SelectHighlightsAction();
-
-			editor._isFocused = false;
 
 			editor.setSelection(new Selection(1, 1, 1, 1));
 			findController.getState().change({ searchString: 'some+thing', isRegex: true, isRevealed: true }, false);

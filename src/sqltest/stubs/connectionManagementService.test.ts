@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IConnectionManagementService, IConnectableInput, IConnectionCompletionOptions, IConnectionCallbacks, IConnectionResult, INewConnectionParams }
-	from 'sql/parts/connection/common/connectionManagement';
-import { IConnectionProfileGroup, ConnectionProfileGroup } from 'sql/parts/connection/common/connectionProfileGroup';
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
-import { ConnectionProfile } from 'sql/parts/connection/common/connectionProfile';
-import { ConnectionManagementInfo } from 'sql/parts/connection/common/connectionManagementInfo';
+	from 'sql/platform/connection/common/connectionManagement';
+import { IConnectionProfileGroup, ConnectionProfileGroup } from 'sql/platform/connection/common/connectionProfileGroup';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
+import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
+import { ConnectionManagementInfo } from 'sql/platform/connection/common/connectionManagementInfo';
 import * as sqlops from 'sqlops';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 
 // Test stubs for commonly used objects
 
@@ -63,11 +63,11 @@ export class TestConnectionManagementService implements IConnectionManagementSer
 		return undefined;
 	}
 
-	getConnectionGroups(): ConnectionProfileGroup[] {
+	getConnectionGroups(providers?: string[]): ConnectionProfileGroup[] {
 		return [];
 	}
 
-	getActiveConnections(): ConnectionProfile[] {
+	getActiveConnections(providers?: string[]): ConnectionProfile[] {
 		return [];
 	}
 
@@ -75,7 +75,7 @@ export class TestConnectionManagementService implements IConnectionManagementSer
 		return undefined;
 	}
 
-	getRecentConnections(): ConnectionProfile[] {
+	getRecentConnections(providers?: string[]): ConnectionProfile[] {
 		return [];
 	}
 
@@ -115,11 +115,15 @@ export class TestConnectionManagementService implements IConnectionManagementSer
 		return [];
 	}
 
-	getConnectionId(connectionProfile: ConnectionProfile): string {
+	getConnectionUri(connectionProfile: ConnectionProfile): string {
 		return undefined;
 	}
 
 	getFormattedUri(uri: string, connectionProfile: ConnectionProfile): string {
+		return undefined;
+	}
+
+	getConnectionUriFromId(connectionId: string): string {
 		return undefined;
 	}
 
@@ -230,7 +234,7 @@ export class TestConnectionManagementService implements IConnectionManagementSer
 		return [];
 	}
 
-	connectIfNotConnected(connection: IConnectionProfile, purpose?: 'dashboard' | 'insights' | 'connection'): Promise<string> {
+	connectIfNotConnected(connection: IConnectionProfile, purpose?: 'dashboard' | 'insights' | 'connection', saveConnection: boolean = false): Promise<string> {
 		return undefined;
 	}
 
@@ -247,6 +251,26 @@ export class TestConnectionManagementService implements IConnectionManagementSer
 	}
 
 	getActiveConnectionCredentials(profileId: string): { [name: string]: string } {
+		return undefined;
+	}
+
+	getServerInfo(profileId: string): sqlops.ServerInfo {
+		return undefined;
+	}
+
+	getConnectionString(connectionId: string): Thenable<string> {
+		return undefined;
+	}
+
+	buildConnectionInfo(connectionString: string, provider?: string): Thenable<sqlops.ConnectionInfo> {
+		return undefined;
+	}
+
+	providerRegistered(providerId: string): boolean {
+		return undefined;
+	}
+
+	getConnectionProfileById(profileId: string): IConnectionProfile {
 		return undefined;
 	}
 }

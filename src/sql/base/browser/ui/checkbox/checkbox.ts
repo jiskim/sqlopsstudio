@@ -3,7 +3,8 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import Event, { Emitter } from 'vs/base/common/event';
+import { Color } from 'vs/base/common/color';
+import { Event, Emitter } from 'vs/base/common/event';
 import { KeyCode } from 'vs/base/common/keyCodes';
 import { Widget } from 'vs/base/browser/ui/widget';
 
@@ -12,11 +13,17 @@ export interface ICheckboxOptions {
 	enabled?: boolean;
 	checked?: boolean;
 	onChange?: (val: boolean) => void;
+	ariaLabel?: string;
+}
+
+export interface ICheckboxStyles {
+	disabledCheckboxForeground?: Color;
 }
 
 export class Checkbox extends Widget {
 	private _el: HTMLInputElement;
 	private _label: HTMLSpanElement;
+	private disabledCheckboxForeground: Color;
 
 	private _onChange = new Emitter<boolean>();
 	public readonly onChange: Event<boolean> = this._onChange.event;
@@ -26,6 +33,11 @@ export class Checkbox extends Widget {
 
 		this._el = document.createElement('input');
 		this._el.type = 'checkbox';
+		this._el.style.verticalAlign = 'middle';
+
+		if (opts.ariaLabel) {
+			this._el.setAttribute('aria-label', opts.ariaLabel);
+		}
 
 		this.onchange(this._el, e => {
 			this._onChange.fire(this.checked);
@@ -39,6 +51,7 @@ export class Checkbox extends Widget {
 		});
 
 		this._label = document.createElement('span');
+		this._label.style.verticalAlign = 'middle';
 
 		this.label = opts.label;
 		this.enabled = opts.enabled || true;
@@ -58,6 +71,7 @@ export class Checkbox extends Widget {
 
 	public set enabled(val: boolean) {
 		this._el.disabled = !val;
+		this.updateStyle();
 	}
 
 	public get enabled(): boolean {
@@ -82,5 +96,14 @@ export class Checkbox extends Widget {
 
 	public enable(): void {
 		this.enabled = true;
+	}
+
+	public style(styles: ICheckboxStyles): void {
+		this.disabledCheckboxForeground = styles.disabledCheckboxForeground;
+		this.updateStyle();
+	}
+
+	private updateStyle(): void {
+		this._label.style.color = !this.enabled && this.disabledCheckboxForeground ? this.disabledCheckboxForeground.toString() : 'inherit';
 	}
 }

@@ -4,30 +4,35 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
+import * as os from 'os';
+
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import {
 	IConnectableInput, IConnectionManagementService,
-	IConnectionCompletionOptions, ConnectionType, IErrorMessageService,
+	IConnectionCompletionOptions, ConnectionType,
 	RunQueryOnConnectionMode, IConnectionResult
-} from 'sql/parts/connection/common/connectionManagement';
-import { IQueryEditorService } from 'sql/parts/query/common/queryEditorService';
-import { IScriptingService } from 'sql/services/scripting/scriptingService';
+} from 'sql/platform/connection/common/connectionManagement';
+import { IQueryEditorService } from 'sql/workbench/services/queryEditor/common/queryEditorService';
+import { IScriptingService } from 'sql/platform/scripting/common/scriptingService';
 import { EditDataInput } from 'sql/parts/editData/common/editDataInput';
-import { IAdminService } from 'sql/parts/admin/common/adminService';
-import { IRestoreDialogController } from 'sql/parts/disasterRecovery/restore/common/restoreService';
-import { IBackupUiService } from 'sql/parts/disasterRecovery/backup/common/backupService';
+import { IAdminService } from 'sql/workbench/services/admin/common/adminService';
+import { IRestoreDialogController } from 'sql/platform/restore/common/restoreService';
 import { IInsightsConfig } from 'sql/parts/dashboard/widgets/insights/interfaces';
-import { IInsightsDialogService } from 'sql/parts/insights/common/interfaces';
-import { ConnectionManagementInfo } from 'sql/parts/connection/common/connectionManagementInfo';
-import Severity from 'vs/base/common/severity';
-import * as sqlops from 'sqlops';
-import nls = require('vs/nls');
-import os = require('os');
-import path = require('path');
-import { IObjectExplorerService } from 'sql/parts/registeredServer/common/objectExplorerService';
-import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { IInsightsDialogService } from 'sql/workbench/services/insights/common/insightsDialogService';
+import { ConnectionManagementInfo } from 'sql/platform/connection/common/connectionManagementInfo';
+import { IObjectExplorerService } from 'sql/workbench/services/objectExplorer/common/objectExplorerService';
 import { QueryInput } from 'sql/parts/query/common/queryInput';
 import { DashboardInput } from 'sql/parts/dashboard/dashboardInput';
+import { ProfilerInput } from 'sql/parts/profiler/editor/profilerInput';
+import { IErrorMessageService } from 'sql/platform/errorMessage/common/errorMessageService';
+import { IBackupUiService } from 'sql/workbench/services/backup/common/backupUiService';
+
+import * as sqlops from 'sqlops';
+
+import Severity from 'vs/base/common/severity';
+import * as nls from 'vs/nls';
+import * as path from 'vs/base/common/paths';
+import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 
 // map for the version of SQL Server (default is 140)
 const scriptCompatibilityOptionMap = {
@@ -108,7 +113,7 @@ export function GetScriptOperationName(operation: ScriptOperation) {
 
 export function connectIfNotAlreadyConnected(connectionProfile: IConnectionProfile, connectionService: IConnectionManagementService): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
-		let connectionID = connectionService.getConnectionId(connectionProfile);
+		let connectionID = connectionService.getConnectionUri(connectionProfile);
 		let uri: string = connectionService.getFormattedUri(connectionID, connectionProfile);
 		if (!connectionService.isConnected(uri)) {
 			let options: IConnectionCompletionOptions = {
@@ -169,19 +174,33 @@ export function scriptSelect(connectionProfile: IConnectionProfile, metadata: sq
 /**
  * Opens a new Edit Data session
  */
-export function editData(connectionProfile: IConnectionProfile, tableName: string, schemaName: string, connectionService: IConnectionManagementService, queryEditorService: IQueryEditorService): Promise<void> {
-	return new Promise<void>((resolve) => {
-		queryEditorService.newEditDataEditor(schemaName, tableName).then((owner: EditDataInput) => {
-			// Connect our editor
-			let options: IConnectionCompletionOptions = {
-				params: { connectionType: ConnectionType.editor, runQueryOnCompletion: RunQueryOnConnectionMode.none, input: owner },
-				saveTheConnection: false,
-				showDashboard: false,
-				showConnectionDialogOnError: true,
-				showFirewallRuleOnError: true
-			};
-			connectionService.connect(connectionProfile, owner.uri, options).then(() => {
-				resolve();
+export function scriptEditSelect(connectionProfile: IConnectionProfile, metadata: sqlops.ObjectMetadata, connectionService: IConnectionManagementService, queryEditorService: IQueryEditorService, scriptingService: IScriptingService): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		connectionService.connectIfNotConnected(connectionProfile).then(connectionResult => {
+			let paramDetails: sqlops.ScriptingParamDetails = getScriptingParamDetails(connectionService, connectionResult, metadata);
+			scriptingService.script(connectionResult, metadata, ScriptOperation.Select, paramDetails).then(result => {
+				if (result.script) {
+					queryEditorService.newEditDataEditor(metadata.schema, metadata.name, result.script).then((owner: EditDataInput) => {
+						// Connect our editor
+						let options: IConnectionCompletionOptions = {
+							params: { connectionType: ConnectionType.editor, runQueryOnCompletion: RunQueryOnConnectionMode.none, input: owner },
+							saveTheConnection: false,
+							showDashboard: false,
+							showConnectionDialogOnError: true,
+							showFirewallRuleOnError: true
+						};
+						connectionService.connect(connectionProfile, owner.uri, options).then(() => {
+							resolve();
+						});
+					}).catch(editorError => {
+						reject(editorError);
+					});
+				} else {
+					let errMsg: string = nls.localize('scriptSelectNotFound', 'No script was returned when calling select script on object ');
+					reject(errMsg.concat(metadata.metadataTypeName));
+				}
+			}, scriptError => {
+				reject(scriptError);
 			});
 		});
 	});
@@ -204,13 +223,22 @@ export function script(connectionProfile: IConnectionProfile, metadata: sqlops.O
 					let script: string = result.script;
 
 					if (script) {
-						queryEditorService.newSqlEditor(script, connectionProfile.providerName).then(() => {
-							resolve();
+						queryEditorService.newSqlEditor(script, connectionProfile.providerName).then((owner) => {
+							// Connect our editor to the input connection
+							let options: IConnectionCompletionOptions = {
+								params: { connectionType: ConnectionType.editor, runQueryOnCompletion: RunQueryOnConnectionMode.none, input: owner },
+								saveTheConnection: false,
+								showDashboard: false,
+								showConnectionDialogOnError: true,
+								showFirewallRuleOnError: true
+							};
+							connectionService.connect(connectionProfile, owner.uri, options).then(() => {
+								resolve();
+							});
 						}).catch(editorError => {
 							reject(editorError);
 						});
-					}
-					else {
+					} else {
 						let scriptNotFoundMsg = nls.localize('scriptNotFoundForObject', 'No script was returned when scripting as {0} on object {1}',
 							GetScriptOperationName(operation), metadata.metadataTypeName);
 						let messageDetail = '';
@@ -242,7 +270,7 @@ export function newQuery(
 	connectionService: IConnectionManagementService,
 	queryEditorService: IQueryEditorService,
 	objectExplorerService: IObjectExplorerService,
-	workbenchEditorService: IWorkbenchEditorService,
+	workbenchEditorService: IEditorService,
 	sqlContent?: string,
 	executeOnOpen: RunQueryOnConnectionMode = RunQueryOnConnectionMode.none
 ): Promise<void> {
@@ -330,13 +358,17 @@ export function showCreateLogin(uri: string, connection: IConnectionProfile, adm
 
 export function showBackup(connection: IConnectionProfile, backupUiService: IBackupUiService): Promise<void> {
 	return new Promise<void>((resolve) => {
-		backupUiService.showBackup(connection);
+		backupUiService.showBackup(connection).then(() => {
+			resolve(void 0);
+		});
 	});
 }
 
 export function showRestore(connection: IConnectionProfile, restoreDialogService: IRestoreDialogController): Promise<void> {
 	return new Promise<void>((resolve) => {
-		restoreDialogService.showDialog(connection);
+		restoreDialogService.showDialog(connection).then(() => {
+			resolve(void 0);
+		});
 	});
 }
 
@@ -354,7 +386,7 @@ export function openInsight(query: IInsightsConfig, profile: IConnectionProfile,
  * @param workbenchEditorService
  * @param topLevelOnly If true, only return top-level (i.e. connected) Object Explorer connections instead of database connections when appropriate
 */
-export function getCurrentGlobalConnection(objectExplorerService: IObjectExplorerService, connectionManagementService: IConnectionManagementService, workbenchEditorService: IWorkbenchEditorService, topLevelOnly: boolean = false): IConnectionProfile {
+export function getCurrentGlobalConnection(objectExplorerService: IObjectExplorerService, connectionManagementService: IConnectionManagementService, workbenchEditorService: IEditorService, topLevelOnly: boolean = false): IConnectionProfile {
 	let connection: IConnectionProfile;
 
 	let objectExplorerSelection = objectExplorerService.getSelectedProfileAndDatabase();
@@ -372,10 +404,13 @@ export function getCurrentGlobalConnection(objectExplorerService: IObjectExplore
 		}
 	}
 
-	let activeInput = workbenchEditorService.getActiveEditorInput();
+	let activeInput = workbenchEditorService.activeEditor;
 	if (activeInput) {
 		if (activeInput instanceof QueryInput || activeInput instanceof EditDataInput || activeInput instanceof DashboardInput) {
 			connection = connectionManagementService.getConnectionProfile(activeInput.uri);
+		}
+		else if (activeInput instanceof ProfilerInput) {
+			connection = activeInput.connection;
 		}
 	}
 

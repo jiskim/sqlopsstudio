@@ -8,6 +8,7 @@
 import { IClipboardService } from 'sql/platform/clipboard/common/clipboardService';
 import { IClipboardService as vsIClipboardService } from 'vs/platform/clipboard/common/clipboardService';
 import { clipboard, nativeImage } from 'electron';
+import { URI } from 'vs/base/common/uri';
 
 export class ClipboardService implements IClipboardService {
 	_serviceBrand: any;
@@ -46,5 +47,26 @@ export class ClipboardService implements IClipboardService {
 	 */
 	writeFindText(text: string): void {
 		this._vsClipboardService.writeFindText(text);
+	}
+
+	/**
+	 * Writes resources to the system clipboard.
+	 */
+	writeResources(resources: URI[]): void {
+		this._vsClipboardService.writeResources(resources);
+	}
+
+	/**
+	 * Reads resources from the system clipboard.
+	 */
+	readResources(): URI[] {
+		return this._vsClipboardService.readResources();
+	}
+
+	/**
+	 * Find out if resources are copied to the clipboard.
+	 */
+	hasResources(): boolean {
+		return this._vsClipboardService.hasResources();
 	}
 }

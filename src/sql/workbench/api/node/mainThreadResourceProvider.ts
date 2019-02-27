@@ -6,7 +6,7 @@
 
 import * as sqlops from 'sqlops';
 import { TPromise } from 'vs/base/common/winjs.base';
-import { IResourceProviderService } from 'sql/parts/accountManagement/common/interfaces';
+import { IResourceProviderService } from 'sql/workbench/services/resourceProvider/common/resourceProviderService';
 import { dispose, IDisposable } from 'vs/base/common/lifecycle';
 import {
 	ExtHostResourceProviderShape,
@@ -30,7 +30,7 @@ export class MainThreadResourceProvider implements MainThreadResourceProviderSha
 	) {
 		this._providerMetadata = {};
 		if (extHostContext) {
-			this._proxy = extHostContext.get(SqlExtHostContext.ExtHostResourceProvider);
+			this._proxy = extHostContext.getProxy(SqlExtHostContext.ExtHostResourceProvider);
 		}
 		this._toDispose = [];
 	}

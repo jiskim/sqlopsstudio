@@ -10,26 +10,29 @@ import { Button } from 'sql/base/browser/ui/button/button';
 import { Checkbox } from 'sql/base/browser/ui/checkbox/checkbox';
 import { InputBox } from 'sql/base/browser/ui/inputBox/inputBox';
 import { ListBox } from 'sql/base/browser/ui/listBox/listBox';
-import { ModalFooterStyle } from 'sql/base/browser/ui/modal/modal';
-import { CategoryView } from 'sql/base/browser/ui/modal/optionsDialog';
+import { ModalFooterStyle } from 'sql/workbench/browser/modal/modal';
+import { CategoryView } from 'sql/workbench/browser/modal/optionsDialog';
 import { SelectBox } from 'sql/base/browser/ui/selectBox/selectBox';
-import { SplitView } from 'sql/base/browser/ui/splitview/splitview';
-import { attachButtonStyler, attachListBoxStyler, attachInputBoxStyler, attachSelectBoxStyler } from 'sql/common/theme/styler';
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
+import { attachButtonStyler, attachListBoxStyler, attachInputBoxStyler, attachSelectBoxStyler, attachCheckboxStyler } from 'sql/platform/theme/common/styler';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import * as BackupConstants from 'sql/parts/disasterRecovery/backup/constants';
-import { IBackupService, IBackupUiService, TaskExecutionMode } from 'sql/parts/disasterRecovery/backup/common/backupService';
-import FileValidationConstants = require('sql/parts/fileBrowser/common/fileValidationServiceConstants');
-import { DashboardComponentParams } from 'sql/services/bootstrap/bootstrapParams';
-import { IBootstrapService, BOOTSTRAP_SERVICE_ID } from 'sql/services/bootstrap/bootstrapService';
+import { IBackupService, TaskExecutionMode } from 'sql/platform/backup/common/backupService';
+import * as FileValidationConstants from 'sql/workbench/services/fileBrowser/common/fileValidationServiceConstants';
+import { IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
+import { ScrollableSplitView } from 'sql/base/browser/ui/scrollableSplitview/scrollableSplitview';
+import { IFileBrowserDialogController } from 'sql/workbench/services/fileBrowser/common/fileBrowserDialogController';
+import { IBackupUiService } from 'sql/workbench/services/backup/common/backupUiService';
 
 import { MessageType } from 'vs/base/browser/ui/inputbox/inputBox';
 import * as lifecycle from 'vs/base/common/lifecycle';
 import { localize } from 'vs/nls';
 import * as DOM from 'vs/base/browser/dom';
-import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
-import { KeyCode } from 'vs/base/common/keyCodes';
 import * as types from 'vs/base/common/types';
 import * as strings from 'vs/base/common/strings';
+import { IWorkbenchThemeService } from 'vs/workbench/services/themes/common/workbenchThemeService';
+import { IContextViewService } from 'vs/platform/contextview/browser/contextView';
+import { IClipboardService } from 'vs/platform/clipboard/common/clipboardService';
+import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 
 export const BACKUP_SELECTOR: string = 'backup-component';
 
@@ -76,6 +79,38 @@ interface MssqlBackupInfo {
 	encryptorName: string;
 }
 
+const LocalizedStrings = {
+	BACKUP_NAME: localize('backup.backupName', 'Backup name'),
+	RECOVERY_MODEL: localize('backup.recoveryModel', 'Recovery model'),
+	BACKUP_TYPE: localize('backup.backupType', 'Backup type'),
+	BACKUP_DEVICE: localize('backup.backupDevice', 'Backup files'),
+	ALGORITHM: localize('backup.algorithm', 'Algorithm'),
+	CERTIFICATE_OR_ASYMMETRIC_KEY: localize('backup.certificateOrAsymmetricKey', 'Certificate or Asymmetric key'),
+	MEDIA: localize('backup.media', 'Media'),
+	MEDIA_OPTION: localize('backup.mediaOption', 'Backup to the existing media set'),
+	MEDIA_OPTION_FORMAT: localize('backup.mediaOptionFormat', 'Backup to a new media set'),
+	EXISTING_MEDIA_APPEND: localize('backup.existingMediaAppend', 'Append to the existing backup set'),
+	EXISTING_MEDIA_OVERWRITE: localize('backup.existingMediaOverwrite', 'Overwrite all existing backup sets'),
+	NEW_MEDIA_SET_NAME: localize('backup.newMediaSetName', 'New media set name'),
+	NEW_MEDIA_SET_DESCRIPTION: localize('backup.newMediaSetDescription', 'New media set description'),
+	CHECKSUM_CONTAINER: localize('backup.checksumContainer', 'Perform checksum before writing to media'),
+	VERIFY_CONTAINER: localize('backup.verifyContainer', 'Verify backup when finished'),
+	CONTINUE_ON_ERROR_CONTAINER: localize('backup.continueOnErrorContainer', 'Continue on error'),
+	EXPIRATION: localize('backup.expiration', 'Expiration'),
+	SET_BACKUP_RETAIN_DAYS: localize('backup.setBackupRetainDays', 'Set backup retain days'),
+	COPY_ONLY: localize('backup.copyOnly', 'Copy-only backup'),
+	ADVANCED_CONFIGURATION: localize('backup.advancedConfiguration', 'Advanced Configuration'),
+	COMPRESSION: localize('backup.compression', 'Compression'),
+	SET_BACKUP_COMPRESSION: localize('backup.setBackupCompression', 'Set backup compression'),
+	ENCRYPTION: localize('backup.encryption', 'Encryption'),
+	TRANSACTION_LOG: localize('backup.transactionLog', 'Transaction log'),
+	TRUNCATE_TRANSACTION_LOG: localize('backup.truncateTransactionLog', 'Truncate the transaction log'),
+	BACKUP_TAIL: localize('backup.backupTail', 'Backup the tail of the log'),
+	RELIABILITY: localize('backup.reliability', 'Reliability'),
+	MEDIA_NAME_REQUIRED_ERROR: localize('backup.mediaNameRequired', 'Media name is required'),
+	NO_ENCRYPTOR_WARNING: localize('backup.noEncryptorWarning', "No certificate or asymmetric key is available")
+};
+
 @Component({
 	selector: BACKUP_SELECTOR,
 	templateUrl: decodeURI(require.toUrl('sql/parts/disasterRecovery/backup/backup.component.html'))
@@ -109,39 +144,8 @@ export class BackupComponent {
 	@ViewChild('advancedOptionContainer', { read: ElementRef }) advancedOptionElement;
 	@ViewChild('advancedOptionBodyContainer', { read: ElementRef }) advancedOptionBodyElement;
 
-	// tslint:disable:no-unused-variable
-	private readonly backupNameLabel: string = localize('backup.backupName', 'Backup name');
-	private readonly recoveryModelLabel: string = localize('backup.recoveryModel', 'Recovery model');
-	private readonly backupTypeLabel: string = localize('backup.backupType', 'Backup type');
-	private readonly backupDeviceLabel: string = localize('backup.backupDevice', 'Backup files');
-	private readonly algorithmLabel: string = localize('backup.algorithm', 'Algorithm');
-	private readonly certificateOrAsymmetricKeyLabel: string = localize('backup.certificateOrAsymmetricKey', 'Certificate or Asymmetric key');
-	private readonly mediaLabel: string = localize('backup.media', 'Media');
-	private readonly mediaOptionLabel: string = localize('backup.mediaOption', 'Backup to the existing media set');
-	private readonly mediaOptionFormatLabel: string = localize('backup.mediaOptionFormat', 'Backup to a new media set');
-	private readonly existingMediaAppendLabel: string = localize('backup.existingMediaAppend', 'Append to the existing backup set');
-	private readonly existingMediaOverwriteLabel: string = localize('backup.existingMediaOverwrite', 'Overwrite all existing backup sets');
-	private readonly newMediaSetNameLabel: string = localize('backup.newMediaSetName', 'New media set name');
-	private readonly newMediaSetDescriptionLabel: string = localize('backup.newMediaSetDescription', 'New media set description');
-	private readonly checksumContainerLabel: string = localize('backup.checksumContainer', 'Perform checksum before writing to media');
-	private readonly verifyContainerLabel: string = localize('backup.verifyContainer', 'Verify backup when finished');
-	private readonly continueOnErrorContainerLabel: string = localize('backup.continueOnErrorContainer', 'Continue on error');
-	private readonly expirationLabel: string = localize('backup.expiration', 'Expiration');
-	private readonly setBackupRetainDaysLabel: string = localize('backup.setBackupRetainDays', 'Set backup retain days');
-	private readonly copyOnlyLabel: string = localize('backup.copyOnly', 'Copy-only backup');
-	private readonly advancedConfigurationLabel: string = localize('backup.advancedConfiguration', 'Advanced Configuration');
-	private readonly compressionLabel: string = localize('backup.compression', 'Compression');
-	private readonly setBackupCompressionLabel: string = localize('backup.setBackupCompression', 'Set backup compression');
-	private readonly encryptionLabel: string = localize('backup.encryption', 'Encryption');
-	private readonly transactionLogLabel: string = localize('backup.transactionLog', 'Transaction log');
-	private readonly reliabilityLabel: string = localize('backup.reliability', 'Reliability');
-	private readonly mediaNameRequiredError: string = localize('backup.mediaNameRequired', 'Media name is required');
-	private readonly noEncryptorWarning: string = localize('backup.noEncryptorWarning', "No certificate or asymmetric key is available");
+	private localizedStrings = LocalizedStrings;
 
-	// tslint:enable:no-unused-variable
-
-	private _backupService: IBackupService;
-	private _backupUiService: IBackupUiService;
 	private _uri: string;
 	private _toDispose: lifecycle.IDisposable[] = [];
 	private _advancedHeaderSize = 32;
@@ -196,10 +200,15 @@ export class BackupComponent {
 	constructor(
 		@Inject(forwardRef(() => ElementRef)) private _el: ElementRef,
 		@Inject(forwardRef(() => ChangeDetectorRef)) private _changeDetectorRef: ChangeDetectorRef,
-		@Inject(BOOTSTRAP_SERVICE_ID) private _bootstrapService: IBootstrapService,
+		@Inject(IWorkbenchThemeService) private themeService: IWorkbenchThemeService,
+		@Inject(IContextViewService) private contextViewService: IContextViewService,
+		@Inject(IFileBrowserDialogController) private fileBrowserDialogService: IFileBrowserDialogController,
+		@Inject(IBackupUiService) private _backupUiService: IBackupUiService,
+		@Inject(IBackupService) private _backupService: IBackupService,
+		@Inject(IClipboardService) private clipboardService: IClipboardService,
+		@Inject(IConnectionManagementService) private connectionManagementService: IConnectionManagementService,
+		@Inject(IInstantiationService) private instantiationService: IInstantiationService
 	) {
-		this._backupService = _bootstrapService.backupService;
-		this._backupUiService = _bootstrapService.backupUiService;
 		this._backupUiService.onShowBackupEvent((param) => this.onGetBackupConfigInfo(param));
 	}
 
@@ -207,51 +216,61 @@ export class BackupComponent {
 		let self = this;
 		this.addFooterButtons();
 
-		this.recoveryBox = new InputBox(this.recoveryModelElement.nativeElement, this._bootstrapService.contextViewService, { placeholder: this.recoveryModel });
+		this.recoveryBox = new InputBox(this.recoveryModelElement.nativeElement, this.contextViewService, {
+			placeholder: this.recoveryModel,
+			ariaLabel: LocalizedStrings.RECOVERY_MODEL
+		});
 		// Set backup type
-		this.backupTypeSelectBox = new SelectBox([], '');
+		this.backupTypeSelectBox = new SelectBox([], '', this.contextViewService, undefined, { ariaLabel: this.localizedStrings.BACKUP_TYPE });
 		this.backupTypeSelectBox.render(this.backupTypeElement.nativeElement);
 
 		// Set copy-only check box
 		this.copyOnlyCheckBox = new Checkbox(this.copyOnlyElement.nativeElement, {
-			label: this.copyOnlyLabel,
+			label: LocalizedStrings.COPY_ONLY,
 			checked: false,
-			onChange: (viaKeyboard) => { }
+			onChange: (viaKeyboard) => { },
+			ariaLabel: LocalizedStrings.COPY_ONLY
 		});
 
 		// Encryption checkbox
 		this.encryptCheckBox = new Checkbox(this.encryptElement.nativeElement, {
-			label: this.encryptionLabel,
+			label: LocalizedStrings.ENCRYPTION,
 			checked: false,
-			onChange: (viaKeyboard) => self.onChangeEncrypt()
+			onChange: (viaKeyboard) => self.onChangeEncrypt(),
+			ariaLabel: LocalizedStrings.ENCRYPTION
 		});
 
 		// Verify backup checkbox
 		this.verifyCheckBox = new Checkbox(this.verifyElement.nativeElement, {
-			label: this.verifyContainerLabel,
+			label: LocalizedStrings.VERIFY_CONTAINER,
 			checked: false,
-			onChange: (viaKeyboard) => { }
+			onChange: (viaKeyboard) => { },
+			ariaLabel: LocalizedStrings.VERIFY_CONTAINER
 		});
 
 		// Perform checksum checkbox
 		this.checksumCheckBox = new Checkbox(this.checksumElement.nativeElement, {
-			label: this.checksumContainerLabel,
+			label: LocalizedStrings.CHECKSUM_CONTAINER,
 			checked: false,
-			onChange: (viaKeyboard) => { }
+			onChange: (viaKeyboard) => { },
+			ariaLabel: LocalizedStrings.CHECKSUM_CONTAINER
 		});
 
 		// Continue on error checkbox
 		this.continueOnErrorCheckBox = new Checkbox(this.continueOnErrorElement.nativeElement, {
-			label: this.continueOnErrorContainerLabel,
+			label: LocalizedStrings.CONTINUE_ON_ERROR_CONTAINER,
 			checked: false,
-			onChange: (viaKeyboard) => { }
+			onChange: (viaKeyboard) => { },
+			ariaLabel: LocalizedStrings.CONTINUE_ON_ERROR_CONTAINER
 		});
 
 		// Set backup name
-		this.backupNameBox = new InputBox(this.backupNameElement.nativeElement, this._bootstrapService.contextViewService);
+		this.backupNameBox = new InputBox(this.backupNameElement.nativeElement, this.contextViewService, {
+			ariaLabel: LocalizedStrings.BACKUP_NAME
+		});
 
 		// Set backup path list
-		this.pathListBox = new ListBox([], '', this._bootstrapService.contextViewService, this._bootstrapService.clipboardService);
+		this.pathListBox = new ListBox([], '', this.contextViewService, this.clipboardService);
 		this.pathListBox.render(this.pathElement.nativeElement);
 
 		// Set backup path add/remove buttons
@@ -264,30 +283,34 @@ export class BackupComponent {
 		this.removePathButton.title = localize('removeFile', 'Remove files');
 
 		// Set compression
-		this.compressionSelectBox = new SelectBox(this.compressionOptions, this.compressionOptions[0]);
+		this.compressionSelectBox = new SelectBox(this.compressionOptions, this.compressionOptions[0], this.contextViewService, undefined, { ariaLabel: this.localizedStrings.SET_BACKUP_COMPRESSION });
 		this.compressionSelectBox.render(this.compressionElement.nativeElement);
 
 		// Set encryption
-		this.algorithmSelectBox = new SelectBox(this.encryptionAlgorithms, this.encryptionAlgorithms[0]);
+		this.algorithmSelectBox = new SelectBox(this.encryptionAlgorithms, this.encryptionAlgorithms[0], this.contextViewService, undefined, { ariaLabel: this.localizedStrings.ALGORITHM });
 		this.algorithmSelectBox.render(this.encryptionAlgorithmElement.nativeElement);
-		this.encryptorSelectBox = new SelectBox([], '');
+		this.encryptorSelectBox = new SelectBox([], '', this.contextViewService, undefined, { ariaLabel: this.localizedStrings.CERTIFICATE_OR_ASYMMETRIC_KEY });
 		this.encryptorSelectBox.render(this.encryptorElement.nativeElement);
 
 		// Set media
 		this.mediaNameBox = new InputBox(this.mediaNameElement.nativeElement,
-			this._bootstrapService.contextViewService,
+			this.contextViewService,
 			{
 				validationOptions: {
-					validation: (value: string) => !value ? ({ type: MessageType.ERROR, content: this.mediaNameRequiredError }) : null
-				}
-			});
+					validation: (value: string) => !value ? ({ type: MessageType.ERROR, content: LocalizedStrings.MEDIA_NAME_REQUIRED_ERROR }) : null
+				},
+				ariaLabel: LocalizedStrings.NEW_MEDIA_SET_NAME
+			}
+		);
 
-		this.mediaDescriptionBox = new InputBox(this.mediaDescriptionElement.nativeElement, this._bootstrapService.contextViewService);
+		this.mediaDescriptionBox = new InputBox(this.mediaDescriptionElement.nativeElement, this.contextViewService, {
+			ariaLabel: LocalizedStrings.NEW_MEDIA_SET_DESCRIPTION
+		});
 
 		// Set backup retain days
-		let invalidInputMessage = localize('invalidInput', 'Invalid input. Value must be greater than or equal 0.');
+		let invalidInputMessage = localize('backupComponent.invalidInput', 'Invalid input. Value must be greater than or equal 0.');
 		this.backupRetainDaysBox = new InputBox(this.backupDaysElement.nativeElement,
-			this._bootstrapService.contextViewService,
+			this.contextViewService,
 			{
 				placeholder: '0',
 				type: 'number',
@@ -300,7 +323,8 @@ export class BackupComponent {
 							return null;
 						}
 					}
-				}
+				},
+				ariaLabel: LocalizedStrings.SET_BACKUP_RETAIN_DAYS
 			});
 
 		// Disable elements
@@ -314,16 +338,16 @@ export class BackupComponent {
 
 	ngAfterViewInit() {
 		// Set category view for advanced options. This should be defined in ngAfterViewInit so that it correctly calculates the text height after data binding.
-		var splitview = new SplitView(this.advancedOptionElement.nativeElement);
+		var splitview = new ScrollableSplitView(this.advancedOptionElement.nativeElement);
 		var advancedBodySize = DOM.getTotalHeight(this.advancedOptionBodyElement.nativeElement);
-		var categoryView = new CategoryView(this.advancedConfigurationLabel, this.advancedOptionBodyElement.nativeElement, true, advancedBodySize, this._advancedHeaderSize);
-		splitview.addView(categoryView);
+		var categoryView = this.instantiationService.createInstance(CategoryView, this.advancedOptionBodyElement.nativeElement, advancedBodySize, { title: LocalizedStrings.ADVANCED_CONFIGURATION, id: LocalizedStrings.ADVANCED_CONFIGURATION, ariaHeaderLabel: LocalizedStrings.ADVANCED_CONFIGURATION });
+		splitview.addView(categoryView, 0);
 		splitview.layout(advancedBodySize + this._advancedHeaderSize);
 
 		this._backupUiService.onShowBackupDialog();
 	}
 
-	private onGetBackupConfigInfo(param: DashboardComponentParams) {
+	private onGetBackupConfigInfo(param: { connection: IConnectionProfile, ownerUri: string }) {
 		// Show spinner
 		this.showSpinner();
 		this.backupEnabled = false;
@@ -367,23 +391,23 @@ export class BackupComponent {
 	private addFooterButtons(): void {
 		// Set script footer button
 		this.scriptButton = new Button(this.scriptButtonElement.nativeElement);
-		this.scriptButton.label = localize('script', 'Script');
+		this.scriptButton.label = localize('backupComponent.script', 'Script');
 		this.addButtonClickHandler(this.scriptButton, () => this.onScript());
-		this._toDispose.push(attachButtonStyler(this.scriptButton, this._bootstrapService.themeService));
+		this._toDispose.push(attachButtonStyler(this.scriptButton, this.themeService));
 		this.scriptButton.enabled = false;
 
 		// Set backup footer button
 		this.backupButton = new Button(this.backupButtonElement.nativeElement);
-		this.backupButton.label = localize('backup', 'Backup');
+		this.backupButton.label = localize('backupComponent.backup', 'Backup');
 		this.addButtonClickHandler(this.backupButton, () => this.onOk());
-		this._toDispose.push(attachButtonStyler(this.backupButton, this._bootstrapService.themeService));
+		this._toDispose.push(attachButtonStyler(this.backupButton, this.themeService));
 		this.backupEnabled = false;
 
 		// Set cancel footer button
 		this.cancelButton = new Button(this.cancelButtonElement.nativeElement);
-		this.cancelButton.label = localize('cancel', 'Cancel');
+		this.cancelButton.label = localize('backupComponent.cancel', 'Cancel');
 		this.addButtonClickHandler(this.cancelButton, () => this.onCancel());
-		this._toDispose.push(attachButtonStyler(this.cancelButton, this._bootstrapService.themeService));
+		this._toDispose.push(attachButtonStyler(this.cancelButton, this.themeService));
 	}
 
 	private initialize(isMetadataPopulated: boolean): void {
@@ -487,18 +511,23 @@ export class BackupComponent {
 
 	private registerListeners(): void {
 		// Theme styler
-		this._toDispose.push(attachInputBoxStyler(this.backupNameBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachInputBoxStyler(this.recoveryBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachSelectBoxStyler(this.backupTypeSelectBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachListBoxStyler(this.pathListBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachButtonStyler(this.addPathButton, this._bootstrapService.themeService));
-		this._toDispose.push(attachButtonStyler(this.removePathButton, this._bootstrapService.themeService));
-		this._toDispose.push(attachSelectBoxStyler(this.compressionSelectBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachSelectBoxStyler(this.algorithmSelectBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachSelectBoxStyler(this.encryptorSelectBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachInputBoxStyler(this.mediaNameBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachInputBoxStyler(this.mediaDescriptionBox, this._bootstrapService.themeService));
-		this._toDispose.push(attachInputBoxStyler(this.backupRetainDaysBox, this._bootstrapService.themeService));
+		this._toDispose.push(attachInputBoxStyler(this.backupNameBox, this.themeService));
+		this._toDispose.push(attachInputBoxStyler(this.recoveryBox, this.themeService));
+		this._toDispose.push(attachSelectBoxStyler(this.backupTypeSelectBox, this.themeService));
+		this._toDispose.push(attachListBoxStyler(this.pathListBox, this.themeService));
+		this._toDispose.push(attachButtonStyler(this.addPathButton, this.themeService));
+		this._toDispose.push(attachButtonStyler(this.removePathButton, this.themeService));
+		this._toDispose.push(attachSelectBoxStyler(this.compressionSelectBox, this.themeService));
+		this._toDispose.push(attachSelectBoxStyler(this.algorithmSelectBox, this.themeService));
+		this._toDispose.push(attachSelectBoxStyler(this.encryptorSelectBox, this.themeService));
+		this._toDispose.push(attachInputBoxStyler(this.mediaNameBox, this.themeService));
+		this._toDispose.push(attachInputBoxStyler(this.mediaDescriptionBox, this.themeService));
+		this._toDispose.push(attachInputBoxStyler(this.backupRetainDaysBox, this.themeService));
+		this._toDispose.push(attachCheckboxStyler(this.copyOnlyCheckBox, this.themeService));
+		this._toDispose.push(attachCheckboxStyler(this.encryptCheckBox, this.themeService));
+		this._toDispose.push(attachCheckboxStyler(this.verifyCheckBox, this.themeService));
+		this._toDispose.push(attachCheckboxStyler(this.checksumCheckBox, this.themeService));
+		this._toDispose.push(attachCheckboxStyler(this.continueOnErrorCheckBox, this.themeService));
 
 		this._toDispose.push(this.backupTypeSelectBox.onDidSelect(selected => this.onBackupTypeChanged()));
 		this.addButtonClickHandler(this.addPathButton, () => this.onAddClick());
@@ -510,7 +539,7 @@ export class BackupComponent {
 			this.backupRetainDaysChanged(days);
 		}));
 
-		this._toDispose.push(this._bootstrapService.themeService.onDidColorThemeChange(e => this.updateTheme()));
+		this._toDispose.push(this.themeService.onDidColorThemeChange(e => this.updateTheme()));
 	}
 
 	// Update theming that is specific to backup dialog
@@ -548,7 +577,7 @@ export class BackupComponent {
 
 	private onCancel(): void {
 		this.close();
-		this._bootstrapService.connectionManagementService.disconnect(this._uri);
+		this.connectionManagementService.disconnect(this._uri);
 	}
 
 	private close(): void {
@@ -584,7 +613,7 @@ export class BackupComponent {
 			if (strings.isFalsyOrWhitespace(this.mediaNameBox.value)) {
 				this.backupEnabled = false;
 				this.backupButton.enabled = false;
-				this.mediaNameBox.showMessage({ type: MessageType.ERROR, content: this.mediaNameRequiredError });
+				this.mediaNameBox.showMessage({ type: MessageType.ERROR, content: LocalizedStrings.MEDIA_NAME_REQUIRED_ERROR });
 			}
 		} else {
 			this.enableBackupButton();
@@ -611,7 +640,7 @@ export class BackupComponent {
 	}
 
 	private onAddClick(): void {
-		this._bootstrapService.fileBrowserDialogService.showDialog(this._uri,
+		this.fileBrowserDialogService.showDialog(this._uri,
 			this.defaultNewBackupFolder,
 			BackupConstants.fileFiltersSet,
 			FileValidationConstants.backup,

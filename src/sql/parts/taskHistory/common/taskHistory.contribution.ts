@@ -8,9 +8,9 @@ import 'vs/css!sql/media/actionBarLabel';
 import { KeyMod, KeyCode } from 'vs/base/common/keyCodes';
 import { localize } from 'vs/nls';
 import { SyncActionDescriptor } from 'vs/platform/actions/common/actions';
-import { ViewletRegistry, Extensions as ViewletExtensions, ViewletDescriptor, ToggleViewletAction } from 'vs/workbench/browser/viewlet';
+import { ViewletRegistry, Extensions as ViewletExtensions, ViewletDescriptor } from 'vs/workbench/browser/viewlet';
 import { IWorkbenchActionRegistry, Extensions as ActionExtensions } from 'vs/workbench/common/actions';
-import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IViewlet } from 'vs/workbench/common/viewlet';
 import { IViewletService } from 'vs/workbench/services/viewlet/browser/viewlet';
 import { Registry } from 'vs/platform/registry/common/platform';
@@ -18,9 +18,12 @@ import { Extensions, IConfigurationRegistry } from 'vs/platform/configuration/co
 import { VIEWLET_ID, TaskHistoryViewlet } from 'sql/parts/taskHistory/viewlet/taskHistoryViewlet';
 import lifecycle = require('vs/base/common/lifecycle');
 import ext = require('vs/workbench/common/contributions');
-import { ITaskService } from 'sql/parts/taskHistory/common/taskService';
+import { ITaskService } from 'sql/platform/taskHistory/common/taskService';
 import { IActivityService, NumberBadge } from 'vs/workbench/services/activity/common/activity';
 import { LifecyclePhase } from 'vs/platform/lifecycle/common/lifecycle';
+import { IEditorGroupsService } from 'vs/workbench/services/group/common/editorGroupsService';
+import { ToggleViewletAction } from 'vs/workbench/browser/parts/activitybar/activitybarActions';
+import { IPartService } from 'vs/workbench/services/part/common/partService';
 
 export class StatusUpdater implements ext.IWorkbenchContribution {
 	static ID = 'data.taskhistory.statusUpdater';
@@ -80,9 +83,9 @@ export class TaskHistoryViewletAction extends ToggleViewletAction {
 		id: string,
 		label: string,
 		@IViewletService viewletService: IViewletService,
-		@IWorkbenchEditorService editorService: IWorkbenchEditorService
+		@IPartService partService: IPartService
 	) {
-		super(id, label, VIEWLET_ID, viewletService, editorService);
+		super(viewletDescriptor, partService, viewletService);
 	}
 }
 
@@ -92,13 +95,13 @@ const viewletDescriptor = new ViewletDescriptor(
 	VIEWLET_ID,
 	'Task History',
 	'taskHistoryViewlet',
-	-90
+	1
 );
 
 Registry.as<ViewletRegistry>(ViewletExtensions.Viewlets).registerViewlet(viewletDescriptor);
 
 // Register StatusUpdater
-(<ext.IWorkbenchContributionsRegistry>Registry.as(ext.Extensions.Workbench)).registerWorkbenchContribution(StatusUpdater, LifecyclePhase.Running);
+(<ext.IWorkbenchContributionsRegistry>Registry.as(ext.Extensions.Workbench)).registerWorkbenchContribution(StatusUpdater, LifecyclePhase.Restored);
 
 const registry = Registry.as<IWorkbenchActionRegistry>(ActionExtensions.WorkbenchActions);
 registry.registerWorkbenchAction(
@@ -107,8 +110,8 @@ registry.registerWorkbenchAction(
 		TaskHistoryViewletAction.ID,
 		TaskHistoryViewletAction.LABEL,
 		{ primary: KeyMod.CtrlCmd | KeyCode.KEY_T }),
-	'View: Show Task Histry',
-	localize('view', "View")
+	'View: Show Task History',
+	localize('taskHistory.view', "View")
 );
 
 let configurationRegistry = <IConfigurationRegistry>Registry.as(Extensions.Configuration);

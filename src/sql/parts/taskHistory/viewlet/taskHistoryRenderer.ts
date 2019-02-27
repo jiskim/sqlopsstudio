@@ -10,7 +10,7 @@ import { ITaskHistoryTemplateData } from 'sql/parts/taskHistory/viewlet/template
 import { TaskNode, TaskStatus } from 'sql/parts/taskHistory/common/taskNode';
 import dom = require('vs/base/browser/dom');
 import { localize } from 'vs/nls';
-import * as Utils from 'sql/parts/connection/common/utils';
+import * as Utils from 'sql/platform/connection/common/utils';
 
 /**
  * Renders the tree items.
@@ -19,7 +19,7 @@ import * as Utils from 'sql/parts/connection/common/utils';
 export class TaskHistoryRenderer implements IRenderer {
 
 	public static readonly TASKOBJECT_HEIGHT = 65;
-	private static readonly ICON_CLASS = 'task-icon icon';
+	private static readonly ICON_CLASS = 'task-icon sql icon';
 	private static readonly TASKOBJECT_TEMPLATE_ID = 'carbonTask';
 	private static readonly FAIL_CLASS = 'error';
 	private static readonly SUCCESS_CLASS = 'success';
@@ -67,27 +67,27 @@ export class TaskHistoryRenderer implements IRenderer {
 		if (taskNode) {
 			templateData.icon.className = TaskHistoryRenderer.ICON_CLASS;
 			switch (taskNode.status) {
-				case TaskStatus.succeeded:
+				case TaskStatus.Succeeded:
 					templateData.icon.classList.add(TaskHistoryRenderer.SUCCESS_CLASS);
 					taskStatus = localize('succeeded', "succeeded");
 					break;
-				case TaskStatus.failed:
+				case TaskStatus.Failed:
 					templateData.icon.classList.add(TaskHistoryRenderer.FAIL_CLASS);
 					taskStatus = localize('failed', "failed");
 					break;
-				case TaskStatus.inProgress:
+				case TaskStatus.InProgress:
 					templateData.icon.classList.add(TaskHistoryRenderer.INPROGRESS_CLASS);
 					taskStatus = localize('inProgress', "in progress");
 					break;
-				case TaskStatus.notStarted:
+				case TaskStatus.NotStarted:
 					templateData.icon.classList.add(TaskHistoryRenderer.NOTSTARTED_CLASS);
 					taskStatus = localize('notStarted', "not started");
 					break;
-				case TaskStatus.canceled:
+				case TaskStatus.Canceled:
 					templateData.icon.classList.add(TaskHistoryRenderer.CANCELED_CLASS);
 					taskStatus = localize('canceled', "canceled");
 					break;
-				case TaskStatus.canceling:
+				case TaskStatus.Canceling:
 					templateData.icon.classList.add(TaskHistoryRenderer.INPROGRESS_CLASS);
 					taskStatus = localize('canceling', "canceling");
 					break;
@@ -117,7 +117,7 @@ export class TaskHistoryRenderer implements IRenderer {
 
 	public timer(taskNode: TaskNode, templateData: ITaskHistoryTemplateData) {
 		let timeLabel = '';
-		if (taskNode.status === TaskStatus.failed) {
+		if (taskNode.status === TaskStatus.Failed) {
 			timeLabel += taskNode.startTime + ' Error: ' + taskNode.message;
 		} else {
 			if (taskNode.startTime) {

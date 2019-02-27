@@ -11,15 +11,25 @@ import { localize } from 'vs/nls';
 import { ParsedArgs } from '../common/environment';
 import { isWindows } from 'vs/base/common/platform';
 import product from 'vs/platform/node/product';
+import { MIN_MAX_MEMORY_SIZE_MB } from 'vs/platform/files/common/files';
 
 const options: minimist.Opts = {
 	string: [
+		// {{SQL CARBON EDIT}}
+	    'database',
+	    'server',
+		'user',
+		// {{SQL CARBON EDIT}} - End
 		'locale',
 		'user-data-dir',
 		'extensions-dir',
+		'folder-uri',
+		'file-uri',
+		'remote',
 		'extensionDevelopmentPath',
 		'extensionTestsPath',
 		'install-extension',
+		'disable-extension',
 		'uninstall-extension',
 		'debugId',
 		'debugPluginHost',
@@ -28,9 +38,24 @@ const options: minimist.Opts = {
 		'debugBrkSearch',
 		'enable-proposed-api',
 		'export-default-configuration',
-		'install-source'
+		'install-source',
+		'upload-logs',
+		'driver',
+		'trace-category-filter',
+		'trace-options',
+		'_',
+		// {{SQL CARBON EDIT}}
+	    'database',
+	    'server',
+		'user',
+		'command'
+		// {{SQL CARBON EDIT}}
 	],
 	boolean: [
+		// {{SQL CARBON EDIT}}
+		'aad',
+		'integrated',
+		// {{SQL CARBON EDIT}} - End
 		'help',
 		'version',
 		'wait',
@@ -49,13 +74,20 @@ const options: minimist.Opts = {
 		'list-extensions',
 		'show-versions',
 		'nolazy',
+		'issue',
 		'skip-getting-started',
+		'skip-release-notes',
 		'sticky-quickopen',
+		'disable-restore-windows',
 		'disable-telemetry',
 		'disable-updates',
 		'disable-crash-reporter',
 		'skip-add-to-recently-opened',
-		'status'
+		'status',
+		'file-write',
+		'file-chmod',
+		'driver-verbose',
+		'trace'
 	],
 	alias: {
 		add: 'a',
@@ -74,6 +106,13 @@ const options: minimist.Opts = {
 		'debugBrkPluginHost': 'inspect-brk-extensions',
 		'debugSearch': 'inspect-search',
 		'debugBrkSearch': 'inspect-brk-search',
+		// {{SQL CARBON EDIT}}
+		database: 'D',
+		integrated: 'E',
+		server: 'S',
+		user: 'U',
+		command : 'c',
+		// {{SQL CARBON EDIT}}
 	}
 };
 
@@ -82,10 +121,14 @@ function validate(args: ParsedArgs): ParsedArgs {
 		args._.forEach(arg => assert(/^(\w:)?[^:]+(:\d*){0,2}$/.test(arg), localize('gotoValidation', "Arguments in `--goto` mode should be in the format of `FILE(:LINE(:CHARACTER))`.")));
 	}
 
+	if (args['max-memory']) {
+		assert(args['max-memory'] >= MIN_MAX_MEMORY_SIZE_MB, `The max-memory argument cannot be specified lower than ${MIN_MAX_MEMORY_SIZE_MB} MB.`);
+	}
+
 	return args;
 }
 
-function stripAppPath(argv: string[]): string[] {
+function stripAppPath(argv: string[]): string[] | undefined {
 	const index = firstIndex(argv, a => !/^-/.test(a));
 
 	if (index > -1) {
@@ -102,7 +145,7 @@ export function parseMainProcessArgv(processArgv: string[]): ParsedArgs {
 
 	// If dev, remove the first non-option argument: it's the app location
 	if (process.env['VSCODE_DEV']) {
-		args = stripAppPath(args);
+		args = stripAppPath(args) || [];
 	}
 
 	return validate(parseArgs(args));
@@ -115,7 +158,7 @@ export function parseCLIProcessArgv(processArgv: string[]): ParsedArgs {
 	let [, , ...args] = processArgv;
 
 	if (process.env['VSCODE_DEV']) {
-		args = stripAppPath(args);
+		args = stripAppPath(args) || [];
 	}
 
 	return validate(parseArgs(args));
@@ -128,32 +171,41 @@ export function parseArgs(args: string[]): ParsedArgs {
 	return minimist(args, options) as ParsedArgs;
 }
 
-export const optionsHelp: { [name: string]: string; } = {
+const optionsHelp: { [name: string]: string; } = {
 	'-d, --diff <file> <file>': localize('diff', "Compare two files with each other."),
 	'-a, --add <dir>': localize('add', "Add folder(s) to the last active window."),
 	'-g, --goto <file:line[:character]>': localize('goto', "Open a file at the path on the specified line and character position."),
-	'--locale <locale>': localize('locale', "The locale to use (e.g. en-US or zh-TW)."),
-	'-n, --new-window': localize('newWindow', "Force a new instance of Code."),
-	'-p, --performance': localize('performance', "Start with the 'Developer: Startup Performance' command enabled."),
-	'--prof-startup': localize('prof-startup', "Run CPU profiler during startup"),
-	'--inspect-extensions': localize('inspect-extensions', "Allow debugging and profiling of extensions. Check the developer tools for the connection uri."),
-	'--inspect-brk-extensions': localize('inspect-brk-extensions', "Allow debugging and profiling of extensions with the extension host being paused after start. Check the developer tools for the connection uri."),
-	'-r, --reuse-window': localize('reuseWindow', "Force opening a file or folder in the last active window."),
-	'--user-data-dir <dir>': localize('userDataDir', "Specifies the directory that user data is kept in, useful when running as root."),
-	'--log <level>': localize('log', "Log level to use. Default is 'info'. Allowed values are 'critical', 'error', 'warn', 'info', 'debug', 'trace', 'off'."),
-	'--verbose': localize('verbose', "Print verbose output (implies --wait)."),
+	'-n, --new-window': localize('newWindow', "Force to open a new window."),
+	'-r, --reuse-window': localize('reuseWindow', "Force to open a file or folder in an already opened window."),
 	'-w, --wait': localize('wait', "Wait for the files to be closed before returning."),
+	'--locale <locale>': localize('locale', "The locale to use (e.g. en-US or zh-TW)."),
+	'--user-data-dir <dir>': localize('userDataDir', "Specifies the directory that user data is kept in. Can be used to open multiple distinct instances of Code."),
+	'-v, --version': localize('version', "Print version."),
+	'-h, --help': localize('help', "Print usage.")
+};
+
+const extensionsHelp: { [name: string]: string; } = {
 	'--extensions-dir <dir>': localize('extensionHomePath', "Set the root path for extensions."),
 	'--list-extensions': localize('listExtensions', "List the installed extensions."),
 	'--show-versions': localize('showVersions', "Show versions of installed extensions, when using --list-extension."),
-	'--install-extension (<extension-id> | <extension-vsix-path>)': localize('installExtension', "Installs an extension."),
 	'--uninstall-extension (<extension-id> | <extension-vsix-path>)': localize('uninstallExtension', "Uninstalls an extension."),
-	'--enable-proposed-api <extension-id>': localize('experimentalApis', "Enables proposed api features for an extension."),
-	'--disable-extensions': localize('disableExtensions', "Disable all installed extensions."),
-	'--disable-gpu': localize('disableGPU', "Disable GPU hardware acceleration."),
+	'--install-extension (<extension-id> | <extension-vsix-path>)': localize('installExtension', "Installs or updates the extension. Use `--force` argument to avoid prompts."),
+	'--enable-proposed-api (<extension-id>)': localize('experimentalApis', "Enables proposed API features for extensions. Can receive one or more extension IDs to enable individually.")
+};
+
+const troubleshootingHelp: { [name: string]: string; } = {
+	'--verbose': localize('verbose', "Print verbose output (implies --wait)."),
+	'--log <level>': localize('log', "Log level to use. Default is 'info'. Allowed values are 'critical', 'error', 'warn', 'info', 'debug', 'trace', 'off'."),
 	'-s, --status': localize('status', "Print process usage and diagnostics information."),
-	'-v, --version': localize('version', "Print version."),
-	'-h, --help': localize('help', "Print usage.")
+	'-p, --performance': localize('performance', "Start with the 'Developer: Startup Performance' command enabled."),
+	'--prof-startup': localize('prof-startup', "Run CPU profiler during startup"),
+	'--disable-extensions': localize('disableExtensions', "Disable all installed extensions."),
+	'--disable-extension <extension-id>': localize('disableExtension', "Disable an extension."),
+	'--inspect-extensions': localize('inspect-extensions', "Allow debugging and profiling of extensions. Check the developer tools for the connection URI."),
+	'--inspect-brk-extensions': localize('inspect-brk-extensions', "Allow debugging and profiling of extensions with the extension host being paused after start. Check the developer tools for the connection URI."),
+	'--disable-gpu': localize('disableGPU', "Disable GPU hardware acceleration."),
+	'--upload-logs': localize('uploadLogs', "Uploads logs from current session to a secure endpoint."),
+	'--max-memory': localize('maxMemory', "Max memory size for a window (in Mbytes).")
 };
 
 export function formatOptions(options: { [name: string]: string; }, columns: number): string {
@@ -161,7 +213,7 @@ export function formatOptions(options: { [name: string]: string; }, columns: num
 	let argLength = Math.max.apply(null, keys.map(k => k.length)) + 2/*left padding*/ + 1/*right padding*/;
 	if (columns - argLength < 25) {
 		// Use a condensed version on narrow terminals
-		return keys.reduce((r, key) => r.concat([`  ${key}`, `      ${options[key]}`]), []).join('\n');
+		return keys.reduce((r, key) => r.concat([`  ${key}`, `      ${options[key]}`]), [] as string[]).join('\n');
 	}
 	let descriptionColumns = columns - argLength - 1;
 	let result = '';
@@ -201,5 +253,38 @@ ${ localize('usage', "Usage")}: ${executable} [${localize('options', "options")}
 ${ isWindows ? localize('stdinWindows', "To read output from another program, append '-' (e.g. 'echo Hello World | {0} -')", product.applicationName) : localize('stdinUnix', "To read from stdin, append '-' (e.g. 'ps aux | grep code | {0} -')", product.applicationName)}
 
 ${ localize('optionsUpperCase', "Options")}:
-${formatOptions(optionsHelp, columns)}`;
+${formatOptions(optionsHelp, columns)}
+
+${ localize('extensionsManagement', "Extensions Management")}:
+${formatOptions(extensionsHelp, columns)}
+
+${ localize('troubleshooting', "Troubleshooting")}:
+${formatOptions(troubleshootingHelp, columns)}`;
+}
+
+/**
+ * Converts an argument into an array
+ * @param arg a argument value. Can be undefined, an entry or an array
+ */
+export function asArray(arg: string | string[] | undefined): string[] {
+	if (arg) {
+		if (Array.isArray(arg)) {
+			return arg;
+		}
+		return [arg];
+	}
+	return [];
+}
+
+/**
+ * Returns whether an argument is present.
+ */
+export function hasArgs(arg: string | string[] | undefined): boolean {
+	if (arg) {
+		if (Array.isArray(arg)) {
+			return !!arg.length;
+		}
+		return true;
+	}
+	return false;
 }

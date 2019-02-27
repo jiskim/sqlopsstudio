@@ -6,18 +6,14 @@ import { join } from 'path';
 
 import { registerDashboardWidget, registerNonCustomDashboardWidget } from 'sql/platform/dashboard/common/widgetRegistry';
 import { Extensions as InsightExtensions, IInsightRegistry } from 'sql/platform/dashboard/common/insightRegistry';
-import { IInsightsConfig } from './interfaces';
+import { IInsightsConfig, IInsightTypeContrib } from './interfaces';
 import { insightsContribution, insightsSchema } from 'sql/parts/dashboard/widgets/insights/insightsWidgetSchemas';
 
-import { IExtensionPointUser, ExtensionsRegistry } from 'vs/platform/extensions/common/extensionsRegistry';
+import { IExtensionPointUser, ExtensionsRegistry } from 'vs/workbench/services/extensions/common/extensionsRegistry';
 import { Registry } from 'vs/platform/registry/common/platform';
 
 const insightRegistry = Registry.as<IInsightRegistry>(InsightExtensions.InsightContribution);
 
-interface IInsightTypeContrib {
-	id: string;
-	contrib: IInsightsConfig;
-}
 
 registerDashboardWidget('insights-widget', '', insightsSchema);
 
@@ -26,11 +22,11 @@ ExtensionsRegistry.registerExtensionPoint<IInsightTypeContrib | IInsightTypeCont
 	function handleCommand(insight: IInsightTypeContrib, extension: IExtensionPointUser<any>) {
 
 		if (insight.contrib.queryFile) {
-			insight.contrib.queryFile = join(extension.description.extensionFolderPath, insight.contrib.queryFile);
+			insight.contrib.queryFile = join(extension.description.extensionLocation.fsPath, insight.contrib.queryFile);
 		}
 
 		if (insight.contrib.details && insight.contrib.details.queryFile) {
-			insight.contrib.details.queryFile = join(extension.description.extensionFolderPath, insight.contrib.details.queryFile);
+			insight.contrib.details.queryFile = join(extension.description.extensionLocation.fsPath, insight.contrib.details.queryFile);
 		}
 
 		registerNonCustomDashboardWidget(insight.id, '', insight.contrib);

@@ -6,11 +6,10 @@
 .monaco-editor .debug-hover-widget {
 	position: absolute;
 	margin-top: -1px;
-	cursor: default;
 	z-index: 50;
 	animation-duration: 0.15s;
 	animation-name: fadeIn;
-	-webkit-user-select: text;
+	user-select: text;
 	word-break: break-all;
 	padding: 4px 5px;
 }
@@ -34,22 +33,14 @@
 	line-height: 18px;
 }
 
-.monaco-editor .debug-hover-widget .debug-hover-tree .monaco-tree .monaco-tree-row > .content {
-	-webkit-user-select: text;
+.monaco-editor .debug-hover-widget .debug-hover-tree .monaco-list-row .monaco-tl-contents {
+	user-select: text;
 	white-space: pre;
 }
 
 /* Disable tree highlight in debug hover tree. */
-.monaco-editor .debug-hover-widget .debug-hover-tree .monaco-tree .monaco-tree-rows > .monaco-tree-row:hover:not(.highlighted):not(.selected):not(.focused)  {
+.monaco-editor .debug-hover-widget .debug-hover-tree .monaco-list-rows .monaco-list-row:hover:not(.highlighted):not(.selected):not(.focused)  {
 	background-color: inherit;
-}
-
-.monaco-editor .debug-hover-widget .debug-hover-tree .monaco-tree .monaco-tree-rows > .monaco-tree-row {
-	cursor: default;
-}
-
-.monaco-editor .debug-hover-widget .debug-hover-tree .monaco-tree .monaco-tree-rows > .monaco-tree-row.has-children {
-	cursor: pointer;
 }
 
 .monaco-editor .debug-hover-widget pre {

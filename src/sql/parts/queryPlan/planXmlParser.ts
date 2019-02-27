@@ -72,7 +72,7 @@ export class PlanNode {
 	indexObject: IndexObject;
 
 	public addChildren(children: PlanNode[]): void {
-		if(children) {
+		if (children) {
 			children.forEach(element => {
 				element.parent = this;
 			});
@@ -143,14 +143,14 @@ export class PlanNode {
 export class PlanXmlParser {
 	parser: DOMParser = new DOMParser();
 	doc: Document;
-	planXml: string
+	planXml: string;
 	root: PlanNode;
 
 	constructor(planXml: string) {
 
 		this.doc = this.parser.parseFromString(planXml, 'application/xml');
 		this.planXml = planXml;
-		let queryPlanNode = this.findChildren(this.doc.childNodes[0], 'QueryPlan');
+		let queryPlanNode = this.findChildren(this.doc.children[0], 'QueryPlan');
 		if (queryPlanNode && queryPlanNode.length > 0) {
 			this.root = new PlanNode();
 			let ops = this.createPlanNodes(queryPlanNode[0], 'RelOp', this.root);
@@ -192,39 +192,39 @@ export class PlanXmlParser {
 		return list;
 	}
 
-	private findChildren(node: Node, elementName: string, untilNode: string = undefined): Node[] {
-		let nodes: Node[] = [];
-		if (node === undefined) {
+	private findChildren(element: Element, elementName: string, untilNode: string = undefined): Element[] {
+		let elements: Element[] = [];
+		if (element === undefined) {
 			return undefined;
 		}
 
-		for (var index = 0; index < node.childNodes.length; index++) {
-			if (node.childNodes[index].nodeName.toLocaleLowerCase() === elementName.toLocaleLowerCase()) {
-				nodes = nodes.concat(node.childNodes[index]);
+		for (let index = 0; index < element.childNodes.length; index++) {
+			if (element.childNodes[index].nodeName.toLocaleLowerCase() === elementName.toLocaleLowerCase()) {
+				elements = elements.concat(element.children[index]);
 			}
 		}
-		if (nodes.length > 0) {
-			return nodes;
+		if (elements.length > 0) {
+			return elements;
 		}
-		for (var index = 0; index < node.childNodes.length; index++) {
-			if (untilNode && node.childNodes[index].nodeName === untilNode) {
+		for (let index = 0; index < element.childNodes.length; index++) {
+			if (untilNode && element.childNodes[index].nodeName === untilNode) {
 				continue;
 			}
-			let result = this.findChildren(node.childNodes[index], elementName, untilNode);
+			let result = this.findChildren(element.children[index], elementName, untilNode);
 			if (result !== undefined) {
-				 	return result;
+				return result;
 			}
 		}
 
 		return undefined;
 	}
 
-	private createPlanNodes(node: Node, elementName: string, root: PlanNode): PlanNode[] {
+	private createPlanNodes(element: Element, elementName: string, root: PlanNode): PlanNode[] {
 		let nodePlans: PlanNode[] = [];
 
-		let children = this.findChildren(node, elementName);
+		let children = this.findChildren(element, elementName);
 		if (children) {
-			for (var index = 0; index < children.length; index++) {
+			for (let index = 0; index < children.length; index++) {
 				let childNode = children[index];
 
 				let planNode = this.convertToPlanNode(childNode);
@@ -249,44 +249,44 @@ export class PlanXmlParser {
 		return nodePlans;
 	}
 
-	private convertToPlanNode(node: Node): PlanNode {
+	private convertToPlanNode(element: Element): PlanNode {
 		let planNode = new PlanNode();
-		planNode.id = this.findAttribute(node.attributes, 'NodeId');
-		planNode.logicalOp = this.findAttribute(node.attributes, 'LogicalOp');
-		planNode.physicalOp = this.findAttribute(node.attributes, 'PhysicalOp');
-		planNode.subtreeCost = +this.findAttribute(node.attributes, 'EstimatedTotalSubtreeCost');
-		planNode.estimateRows = this.findAttribute(node.attributes, 'EstimateRows');
-		planNode.estimateCpu = this.findAttribute(node.attributes, 'EstimateCPU');
-		planNode.estimateIo = this.findAttribute(node.attributes, 'EstimateIO');
-		planNode.estimateRebinds = this.findAttribute(node.attributes, 'EstimateRebinds');
-		planNode.estimateRewinds = this.findAttribute(node.attributes, 'EstimateRewinds');
-		planNode.parallel = this.findAttribute(node.attributes, 'Parallel') === '1';
-		planNode.partitioned = this.findAttribute(node.attributes, 'Partitioned') === '1';
+		planNode.id = this.findAttribute(element.attributes, 'NodeId');
+		planNode.logicalOp = this.findAttribute(element.attributes, 'LogicalOp');
+		planNode.physicalOp = this.findAttribute(element.attributes, 'PhysicalOp');
+		planNode.subtreeCost = +this.findAttribute(element.attributes, 'EstimatedTotalSubtreeCost');
+		planNode.estimateRows = this.findAttribute(element.attributes, 'EstimateRows');
+		planNode.estimateCpu = this.findAttribute(element.attributes, 'EstimateCPU');
+		planNode.estimateIo = this.findAttribute(element.attributes, 'EstimateIO');
+		planNode.estimateRebinds = this.findAttribute(element.attributes, 'EstimateRebinds');
+		planNode.estimateRewinds = this.findAttribute(element.attributes, 'EstimateRewinds');
+		planNode.parallel = this.findAttribute(element.attributes, 'Parallel') === '1';
+		planNode.partitioned = this.findAttribute(element.attributes, 'Partitioned') === '1';
 		return planNode;
 	}
 
-	private convertToRuntimeInfo(node: Node): RuntimePerThread {
+	private convertToRuntimeInfo(element: Element): RuntimePerThread {
 		let runtimeNode = new RuntimePerThread();
-		runtimeNode.actualExecutionMode = this.findAttribute(node.attributes, 'ActualExecutionMode');
-		runtimeNode.actualExecutions = +this.findAttribute(node.attributes, 'ActualExecutions');
-		runtimeNode.actualRow = +this.findAttribute(node.attributes, 'ActualRows');
-		runtimeNode.threadId = +this.findAttribute(node.attributes, 'Thread');
+		runtimeNode.actualExecutionMode = this.findAttribute(element.attributes, 'ActualExecutionMode');
+		runtimeNode.actualExecutions = +this.findAttribute(element.attributes, 'ActualExecutions');
+		runtimeNode.actualRow = +this.findAttribute(element.attributes, 'ActualRows');
+		runtimeNode.threadId = +this.findAttribute(element.attributes, 'Thread');
 		return runtimeNode;
 	}
 
-	private convertToObject(node: Node): IndexObject {
+	private convertToObject(element: Element): IndexObject {
 		let objectNode = new IndexObject();
-		objectNode.database = this.findAttribute(node.attributes, 'Database');
-		objectNode.index = this.findAttribute(node.attributes, 'Index');
-		objectNode.indexKind = this.findAttribute(node.attributes, 'IndexKind');
-		objectNode.schema = this.findAttribute(node.attributes, 'Schema');
-		objectNode.table = this.findAttribute(node.attributes, 'Table');
+		objectNode.database = this.findAttribute(element.attributes, 'Database');
+		objectNode.index = this.findAttribute(element.attributes, 'Index');
+		objectNode.indexKind = this.findAttribute(element.attributes, 'IndexKind');
+		objectNode.schema = this.findAttribute(element.attributes, 'Schema');
+		objectNode.table = this.findAttribute(element.attributes, 'Table');
 		return objectNode;
 	}
 
 	private findAttribute(attributes: NamedNodeMap, attName: string): any {
-		for (var index = 0; index < attributes.length; index++) {
-			var attribute = attributes[index];
+		for (let index = 0; index < attributes.length; index++) {
+			let attribute = attributes[index];
 			if (attribute.name === attName) {
 				return attribute.value;
 			}

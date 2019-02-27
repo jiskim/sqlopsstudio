@@ -12,19 +12,31 @@ var cson = require('cson-parser');
 var https = require('https');
 var url = require('url');
 
+/**
+ * @param {string} urlString
+ */
 function getOptions(urlString) {
 	var _url = url.parse(urlString);
+	var headers = {
+		'User-Agent': 'VSCode'
+	};
+	var token = process.env['GITHUB_TOKEN'];
+	if (token) {
+		headers['Authorization'] = 'token ' + token;
+	}
 	return {
 		protocol: _url.protocol,
 		host: _url.host,
 		port: _url.port,
 		path: _url.path,
-		headers: {
-			'User-Agent': 'NodeJS'
-		}
+		headers: headers
 	};
 }
 
+/**
+ * @param {string} url
+ * @param {number} redirectCount
+ */
 function download(url, redirectCount) {
 	return new Promise((c, e) => {
 		var content = '';
@@ -32,12 +44,16 @@ function download(url, redirectCount) {
 			response.on('data', function (data) {
 				content += data.toString();
 			}).on('end', function () {
+				if (response.statusCode === 403 && response.headers['x-ratelimit-remaining'] === '0') {
+					e('GitHub API rate exceeded. Set GITHUB_TOKEN environment variable to increase rate limit.');
+					return;
+				}
 				let count = redirectCount || 0;
 				if (count < 5 && response.statusCode >= 300 && response.statusCode <= 303 || response.statusCode === 307) {
 					let location = response.headers['location'];
 					if (location) {
 						console.log("Redirected " + url + " to " + location);
-						download(location, count+1).then(c, e);
+						download(location, count + 1).then(c, e);
 						return;
 					}
 				}
@@ -59,17 +75,13 @@ function getCommitSha(repoId, repoPath) {
 				commitDate: lastCommit.commit.author.date
 			});
 		} catch (e) {
-			console.error("Failed extracting the SHA: " + content);
-			return Promise.resolve(null);
+			return Promise.reject(new Error("Failed extracting the SHA: " + content));
 		}
-	}, function () {
-		console.error('Failed loading ' + commitInfo);
-		return Promise.resolve(null);
 	});
 }
 
-exports.update = function (repoId, repoPath, dest, modifyGrammar) {
-	var contentPath = 'https://raw.githubusercontent.com/' + repoId + '/master/' + repoPath;
+exports.update = function (repoId, repoPath, dest, modifyGrammar, version = 'master') {
+	var contentPath = 'https://raw.githubusercontent.com/' + repoId + `/${version}/` + repoPath;
 	console.log('Reading from ' + contentPath);
 	return download(contentPath).then(function (content) {
 		var ext = path.extname(repoPath);
@@ -78,11 +90,10 @@ exports.update = function (repoId, repoPath, dest, modifyGrammar) {
 			grammar = plist.parse(content);
 		} else if (ext === '.cson') {
 			grammar = cson.parse(content);
-		} else if (ext === '.json') {
+		} else if (ext === '.json' || ext === '.JSON-tmLanguage') {
 			grammar = JSON.parse(content);
 		} else {
-			console.error('Unknown file extension: ' + ext);
-			return;
+			return Promise.reject(new Error('Unknown file extension: ' + ext));
 		}
 		if (modifyGrammar) {
 			modifyGrammar(grammar);
@@ -99,25 +110,30 @@ exports.update = function (repoId, repoPath, dest, modifyGrammar) {
 			if (info) {
 				result.version = 'https://github.com/' + repoId + '/commit/' + info.commitSha;
 			}
-			for (let key in grammar) {
-				if (!result.hasOwnProperty(key)) {
+
+			let keys = ['name', 'scopeName', 'comment', 'injections', 'patterns', 'repository'];
+			for (let key of keys) {
+				if (grammar.hasOwnProperty(key)) {
 					result[key] = grammar[key];
 				}
 			}
 
 			try {
-				fs.writeFileSync(dest, JSON.stringify(result, null, '\t'));
+				fs.writeFileSync(dest, JSON.stringify(result, null, '\t').replace(/\n/g, '\r\n'));
 				if (info) {
 					console.log('Updated ' + path.basename(dest) + ' to ' + repoId + '@' + info.commitSha.substr(0, 7) + ' (' + info.commitDate.substr(0, 10) + ')');
 				} else {
 					console.log('Updated ' + path.basename(dest));
 				}
 			} catch (e) {
-				console.error(e);
+				return Promise.reject(e);
 			}
 		});
 
-	}, console.error);
+	}, console.error).catch(e => {
+		console.error(e);
+		process.exit(1);
+	});
 };
 
 if (path.basename(process.argv[1]) === 'update-grammar.js') {

@@ -30,7 +30,15 @@ export class ObjectExplorerProviderTestService implements sqlops.ObjectExplorerP
 
 	}
 
+	public registerOnSessionDisconnected(handler: (response: sqlops.ObjectExplorerSession) => any): void {
+
+	}
+
 	public registerOnExpandCompleted(handler: (response: sqlops.ObjectExplorerExpandInfo) => any): void {
 
+	}
+
+	public findNodes(findNodesInfo: sqlops.FindNodesInfo): Thenable<sqlops.ObjectExplorerFindNodesResponse> {
+		return undefined;
 	}
 }

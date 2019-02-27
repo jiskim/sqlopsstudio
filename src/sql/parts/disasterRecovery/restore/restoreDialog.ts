@@ -5,9 +5,9 @@
 
 'use strict';
 import 'vs/css!./media/restoreDialog';
-import { Builder, $ } from 'vs/base/browser/builder';
+import { Builder, $ } from 'sql/base/browser/builder';
 import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 import { KeyCode, KeyMod } from 'vs/base/common/keyCodes';
 import { Widget } from 'vs/base/browser/ui/widget';
 import { MessageType, IInputOptions } from 'vs/base/browser/ui/inputbox/inputBox';
@@ -17,6 +17,10 @@ import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IPartService } from 'vs/workbench/services/part/common/partService';
 import { localize } from 'vs/nls';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
+import { mixin } from 'vs/base/common/objects';
+import * as strings from 'vs/base/common/strings';
+
+import * as sqlops from 'sqlops';
 
 import { Button } from 'sql/base/browser/ui/button/button';
 import { Checkbox } from 'sql/base/browser/ui/checkbox/checkbox';
@@ -26,20 +30,18 @@ import { RowSelectionModel } from 'sql/base/browser/ui/table/plugins/rowSelectio
 import { CheckboxSelectColumn } from 'sql/base/browser/ui/table/plugins/checkboxSelectColumn.plugin';
 import { Table } from 'sql/base/browser/ui/table/table';
 import { TableDataView } from 'sql/base/browser/ui/table/tableDataView';
-import * as DialogHelper from 'sql/base/browser/ui/modal/dialogHelper';
-import { Modal } from 'sql/base/browser/ui/modal/modal';
-import { attachButtonStyler, attachModalDialogStyler, attachTableStyler, attachInputBoxStyler, attachSelectBoxStyler, attachEditableDropdownStyler } from 'sql/common/theme/styler';
+import * as DialogHelper from 'sql/workbench/browser/modal/dialogHelper';
+import { Modal } from 'sql/workbench/browser/modal/modal';
+import { attachButtonStyler, attachModalDialogStyler, attachTableStyler, attachInputBoxStyler, attachSelectBoxStyler, attachEditableDropdownStyler, attachCheckboxStyler } from 'sql/platform/theme/common/styler';
 import * as TelemetryKeys from 'sql/common/telemetryKeys';
 import * as BackupConstants from 'sql/parts/disasterRecovery/backup/constants';
 import { RestoreViewModel, RestoreOptionParam, SouceDatabaseNamesParam } from 'sql/parts/disasterRecovery/restore/restoreViewModel';
-import * as FileValidationConstants from 'sql/parts/fileBrowser/common/fileValidationServiceConstants';
-import { IBootstrapService } from 'sql/services/bootstrap/bootstrapService';
+import * as FileValidationConstants from 'sql/workbench/services/fileBrowser/common/fileValidationServiceConstants';
 import { Dropdown } from 'sql/base/browser/ui/editableDropdown/dropdown';
 import { TabbedPanel, PanelTabIdentifier } from 'sql/base/browser/ui/panel/panel';
-import * as DOM from 'vs/base/browser/dom';
-import * as sqlops from 'sqlops';
-import * as strings from 'vs/base/common/strings';
 import { ServiceOptionType } from 'sql/workbench/api/common/sqlExtHostTypes';
+import { IClipboardService } from 'sql/platform/clipboard/common/clipboardService';
+import { IFileBrowserDialogController } from 'sql/workbench/services/fileBrowser/common/fileBrowserDialogController';
 
 interface FileListElement {
 	logicalFileName: string;
@@ -47,6 +49,11 @@ interface FileListElement {
 	originalFileName: string;
 	restoreAs: string;
 }
+
+const LocalizedStrings = {
+	BACKFILEPATH: localize('backupFilePath', "Backup file path"),
+	TARGETDATABASE: localize('targetDatabase', 'Target database')
+};
 
 export class RestoreDialog extends Modal {
 	public viewModel: RestoreViewModel;
@@ -96,10 +103,13 @@ export class RestoreDialog extends Modal {
 
 	private _fileListTable: Table<FileListElement>;
 	private _fileListData: TableDataView<FileListElement>;
+	private _fileListTableContainer: HTMLElement;
 
 	private _restorePlanTable: Table<Slick.SlickData>;
 	private _restorePlanData: TableDataView<Slick.SlickData>;
 	private _restorePlanColumn;
+	private _restorePlanTableContainer: HTMLElement;
+	private _isRenderedRestorePlanTable: boolean;
 
 	private _onRestore = new Emitter<boolean>();
 	public onRestore: Event<boolean> = this._onRestore.event;
@@ -119,17 +129,18 @@ export class RestoreDialog extends Modal {
 	constructor(
 		optionsMetadata: sqlops.ServiceOption[],
 		@IPartService partService: IPartService,
-		@IThemeService private _themeService: IThemeService,
+		@IThemeService themeService: IThemeService,
 		@IContextViewService private _contextViewService: IContextViewService,
-		@IBootstrapService private _bootstrapService: IBootstrapService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IContextKeyService contextKeyService: IContextKeyService
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IFileBrowserDialogController private fileBrowserDialogService: IFileBrowserDialogController,
+		@IClipboardService clipboardService: IClipboardService
 	) {
-		super(localize('RestoreDialogTitle', 'Restore database'), TelemetryKeys.Restore, partService, telemetryService, contextKeyService, { hasErrors: true, isWide: true, hasSpinner: true });
-		this._restoreTitle = localize('restoreTitle', 'Restore database');
-		this._databaseTitle = localize('database', 'Database');
-		this._backupFileTitle = localize('backupFile', 'Backup file');
-		this._restoreLabel = localize('restore', 'Restore');
+		super(localize('RestoreDialogTitle', 'Restore database'), TelemetryKeys.Restore, partService, telemetryService, clipboardService, themeService, contextKeyService, { hasErrors: true, isWide: true, hasSpinner: true });
+		this._restoreTitle = localize('restoreDialog.restoreTitle', 'Restore database');
+		this._databaseTitle = localize('restoreDialog.database', 'Database');
+		this._backupFileTitle = localize('restoreDialog.backupFile', 'Backup file');
+		this._restoreLabel = localize('restoreDialog.restore', 'Restore');
 
 		// view model
 		this.viewModel = new RestoreViewModel(optionsMetadata);
@@ -141,13 +152,15 @@ export class RestoreDialog extends Modal {
 		this.viewModel.onSetRestoreOption((optionParams) => this.updateRestoreOption(optionParams));
 		this.viewModel.onUpdateBackupSetsToRestore((backupSets) => this.updateBackupSetsToRestore(backupSets));
 		this.viewModel.onUpdateRestoreDatabaseFiles((files) => this.updateRestoreDatabaseFiles(files));
+
+		this._isRenderedRestorePlanTable = false;
 	}
 
 	public render() {
 		super.render();
 		attachModalDialogStyler(this, this._themeService);
-		let cancelLabel = localize('cancel', 'Cancel');
-		this._scriptButton = this.addFooterButton(localize('script', 'Script'), () => this.restore(true));
+		let cancelLabel = localize('restoreDialog.cancel', 'Cancel');
+		this._scriptButton = this.addFooterButton(localize('restoreDialog.script', 'Script'), () => this.restore(true));
 		this._restoreButton = this.addFooterButton(this._restoreLabel, () => this.restore(false));
 		this._closeButton = this.addFooterButton(cancelLabel, () => this.cancel());
 		this.registerListeners();
@@ -171,12 +184,13 @@ export class RestoreDialog extends Modal {
 				validationOptions: {
 					validation: (value: string) => !value ? ({ type: MessageType.ERROR, content: errorMessage }) : null
 				},
-				placeholder: localize('multipleBackupFilePath', 'Please enter one or more file paths separated by commas')
+				placeholder: localize('multipleBackupFilePath', 'Please enter one or more file paths separated by commas'),
+				ariaLabel: LocalizedStrings.BACKFILEPATH
 			};
 
 			filePathContainer.div({ class: 'dialog-input-section' }, (inputContainer) => {
 				inputContainer.div({ class: 'dialog-label' }, (labelContainer) => {
-					labelContainer.innerHtml(localize('backupFilePath', "Backup file path"));
+					labelContainer.safeInnerHtml(LocalizedStrings.BACKFILEPATH);
 				});
 
 				inputContainer.div({ class: 'dialog-input' }, (inputCellContainer) => {
@@ -184,7 +198,7 @@ export class RestoreDialog extends Modal {
 				});
 
 				inputContainer.div({ class: 'file-browser' }, (inputCellContainer) => {
-					this._browseFileButton = new Button(inputCellContainer);
+					this._browseFileButton = new Button(inputCellContainer.getHTMLElement());
 					this._browseFileButton.label = '...';
 				});
 			});
@@ -213,7 +227,7 @@ export class RestoreDialog extends Modal {
 
 			destinationContainer.div({ class: 'dialog-input-section' }, (inputContainer) => {
 				inputContainer.div({ class: 'dialog-label' }, (labelContainer) => {
-					labelContainer.innerHtml(localize('targetDatabase', 'Target database'));
+					labelContainer.text(LocalizedStrings.TARGETDATABASE);
 				});
 
 				inputContainer.div({ class: 'dialog-input' }, (inputCellContainer) => {
@@ -221,7 +235,9 @@ export class RestoreDialog extends Modal {
 					inputCellContainer.style('width', '100%');
 					this._databaseDropdown = new Dropdown(inputCellContainer.getHTMLElement(), this._contextViewService, this._themeService,
 						{
-							strictSelection: false
+							strictSelection: false,
+							ariaLabel: LocalizedStrings.TARGETDATABASE,
+							actionLabel: localize('restoreDialog.toggleDatabaseNameDropdown', 'Select Database Toggle Dropdown')
 						}
 					);
 					this._databaseDropdown.onValueChange(s => {
@@ -254,8 +270,11 @@ export class RestoreDialog extends Modal {
 
 			// Backup sets table
 			restorePlanContainer.div({ class: 'dialog-input-section restore-list' }, (labelContainer) => {
+				this._restorePlanTableContainer = labelContainer.getHTMLElement();
+				labelContainer.hide();
 				this._restorePlanData = new TableDataView<Slick.SlickData>();
-				this._restorePlanTable = new Table<Slick.SlickData>(labelContainer.getHTMLElement(), this._restorePlanData, this._restorePlanColumn, { enableColumnReorder: false });
+				this._restorePlanTable = new Table<Slick.SlickData>(labelContainer.getHTMLElement(),
+					{ dataProvider: this._restorePlanData, columns: this._restorePlanColumn }, { enableColumnReorder: false });
 				this._restorePlanTable.setSelectionModel(new RowSelectionModel({ selectActiveRow: false }));
 				this._restorePlanTable.onSelectedRowsChanged((e, data) => this.backupFileCheckboxChanged(e, data));
 			});
@@ -287,6 +306,8 @@ export class RestoreDialog extends Modal {
 				this.createLabelElement(sectionContainer, localize('restoreDatabaseFileDetails', 'Restore database file details'), true);
 				// file list table
 				sectionContainer.div({ class: 'dialog-input-section restore-list' }, (fileNameContainer) => {
+					this._fileListTableContainer = fileNameContainer.getHTMLElement();
+					fileNameContainer.hide();
 					let logicalFileName = localize('logicalFileName', 'Logical file Name');
 					let fileType = localize('fileType', 'File type');
 					let originalFileName = localize('originalFileName', 'Original File Name');
@@ -309,7 +330,8 @@ export class RestoreDialog extends Modal {
 						field: 'restoreAs'
 					}];
 					this._fileListData = new TableDataView<FileListElement>();
-					this._fileListTable = new Table<FileListElement>(fileNameContainer.getHTMLElement(), this._fileListData, columns, { enableColumnReorder: false });
+					this._fileListTable = new Table<FileListElement>(fileNameContainer.getHTMLElement(),
+						{ dataProvider: this._fileListData, columns }, { enableColumnReorder: false });
 					this._fileListTable.setSelectionModel(new RowSelectionModel());
 				});
 			});
@@ -452,7 +474,7 @@ export class RestoreDialog extends Modal {
 			className += ' header';
 		}
 		container.div({ class: className }, (labelContainer) => {
-			labelContainer.innerHtml(content);
+			labelContainer.text(content);
 		});
 	}
 
@@ -505,9 +527,11 @@ export class RestoreDialog extends Modal {
 			checkbox = new Checkbox(inputCellContainer.getHTMLElement(), {
 				label: label,
 				checked: isChecked,
-				onChange: onCheck
+				onChange: onCheck,
+				ariaLabel: label
 			});
 		});
+		this._register(attachCheckboxStyler(checkbox, this._themeService));
 		return checkbox;
 	}
 
@@ -515,11 +539,11 @@ export class RestoreDialog extends Modal {
 		let selectBox: SelectBox;
 		container.div({ class: 'dialog-input-section' }, (inputContainer) => {
 			inputContainer.div({ class: 'dialog-label' }, (labelContainer) => {
-				labelContainer.innerHtml(label);
+				labelContainer.text(label);
 			});
 
 			inputContainer.div({ class: 'dialog-input' }, (inputCellContainer) => {
-				selectBox = new SelectBox(options, selectedOption, inputCellContainer.getHTMLElement(), this._contextViewService);
+				selectBox = new SelectBox(options, selectedOption, this._contextViewService, inputCellContainer.getHTMLElement(), { ariaLabel: label });
 				selectBox.render(inputCellContainer.getHTMLElement());
 			});
 		});
@@ -528,21 +552,38 @@ export class RestoreDialog extends Modal {
 
 	private createInputBoxHelper(container: Builder, label: string, options?: IInputOptions): InputBox {
 		let inputBox: InputBox;
+		let ariaOptions = {
+			ariaLabel: label
+		};
 		container.div({ class: 'dialog-input-section' }, (inputContainer) => {
 			inputContainer.div({ class: 'dialog-label' }, (labelContainer) => {
-				labelContainer.innerHtml(label);
+				labelContainer.safeInnerHtml(label);
 			});
 
 			inputContainer.div({ class: 'dialog-input' }, (inputCellContainer) => {
-				inputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService, options);
+				inputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService, mixin(ariaOptions, options));
 			});
 		});
 		return inputBox;
 	}
 
+	private clearRestorePlanDataTable(): void {
+		if (this._restorePlanData.getLength() > 0) {
+			this._restorePlanData.clear();
+			new Builder(this._restorePlanTableContainer).hide();
+		}
+	}
+
+	private clearFileListTable(): void {
+		if (this._fileListData.getLength() > 0) {
+			this._fileListData.clear();
+			new Builder(this._fileListTableContainer).hide();
+		}
+	}
+
 	private resetRestoreContent(): void {
-		this._restorePlanData.clear();
-		this._fileListData.clear();
+		this.clearRestorePlanDataTable();
+		this.clearFileListTable();
 		this._restoreButton.enabled = false;
 		this._scriptButton.enabled = false;
 	}
@@ -621,7 +662,7 @@ export class RestoreDialog extends Modal {
 	}
 
 	private onFileBrowserRequested(): void {
-		this._bootstrapService.fileBrowserDialogService.showDialog(this._ownerUri,
+		this.fileBrowserDialogService.showDialog(this._ownerUri,
 			this.viewModel.defaultBackupFolder,
 			BackupConstants.fileFiltersSet,
 			FileValidationConstants.restore,
@@ -803,8 +844,8 @@ export class RestoreDialog extends Modal {
 	}
 
 	private updateRestoreDatabaseFiles(dbFiles: sqlops.RestoreDatabaseFileInfo[]) {
-		this._fileListData.clear();
-		if (dbFiles) {
+		this.clearFileListTable();
+		if (dbFiles && dbFiles.length > 0) {
 			let data = [];
 			for (let i = 0; i < dbFiles.length; i++) {
 				data[i] = {
@@ -814,7 +855,7 @@ export class RestoreDialog extends Modal {
 					restoreAs: dbFiles[i].restoreAsFileName
 				};
 			}
-
+			new Builder(this._fileListTableContainer).show();
 			this._fileListData.push(data);
 
 			// Select the first row for the table by default
@@ -833,7 +874,7 @@ export class RestoreDialog extends Modal {
 			}
 			this._restorePlanTable.setSelectedRows(selectedRow);
 		} else {
-			this._restorePlanData.clear();
+			this.clearRestorePlanDataTable();
 			if (backupSetsToRestore && backupSetsToRestore.length > 0) {
 				if (!this._restorePlanColumn) {
 					let firstRow = backupSetsToRestore[0];
@@ -865,9 +906,16 @@ export class RestoreDialog extends Modal {
 						selectedRow.push(i);
 					}
 				}
+				new Builder(this._restorePlanTableContainer).show();
 				this._restorePlanData.push(data);
 				this._restorePlanTable.setSelectedRows(selectedRow);
 				this._restorePlanTable.setActiveCell(selectedRow[0], 0);
+
+				if (!this._isRenderedRestorePlanTable) {
+					this._isRenderedRestorePlanTable = true;
+					this._restorePlanTable.resizeCanvas();
+					this._restorePlanTable.autosizeColumns();
+				}
 			}
 		}
 	}

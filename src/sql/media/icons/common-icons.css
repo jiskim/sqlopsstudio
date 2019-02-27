@@ -30,6 +30,12 @@
 	background: url("database_inverse.svg") center center no-repeat;
 }
 
+.vs .icon.error,
+.vs-dark .icon.error,
+.hc-black .icon.error {
+	    background: url("globalerror_red.svg") center center no-repeat;
+}
+
 .vs .icon.file {
 	background: url("file.svg") center center no-repeat;
 }
@@ -57,22 +63,37 @@
 	background: url("server_page_inverse.svg") center center no-repeat;
 }
 
-.vs .icon.error,
-.vs-dark .icon.error,
-.hc-black .icon.error {
+.vs .icon.globalError,
+.vs-dark .icon.globalError,
+.hc-black .icon.globalError {
+	background: url("globalerror.svg") center center no-repeat;
+}
+
+.vs .sql.icon.error,
+.vs-dark .sql.icon.error,
+.hc-black .sql.icon.error {
 	content: url("status_error.svg");
 }
 
-.vs .icon.warning,
-.vs-dark .icon.warning,
-.hc-black .icon.warning {
+.vs .sql.icon.warning,
+.vs-dark .sql.icon.warning,
+.hc-black .sql.icon.warning {
 	content: url("status_warning.svg");
 }
 
-.vs .icon.info,
-.vs-dark .icon.info,
-.hc-black .icon.info {
+.vs .sql.icon.info,
+.vs-dark .sql.icon.info,
+.hc-black .sql.icon.info {
 	content: url("status_info.svg");
+}
+
+.vs .icon.help {
+	content: url("help.svg");
+}
+
+.vs-dark .icon.help,
+.hc-black .icon.help {
+	content: url("help_inverse.svg");
 }
 
 .vs .icon.success,
@@ -104,13 +125,16 @@
 	background-position: 2px center;
 }
 
-.vs .icon.close {
-	background-image: url('close.svg');
+.vs .icon.close,
+.vs .icon.remove {
+	background: url('close.svg') center center no-repeat !important;
 }
 
 .vs-dark .icon.close,
-.hc-black .icon.close {
-	background-image: url('close-dark.svg');
+.hc-black .icon.close,
+.vs-dark .icon.remove,
+.hc-black .icon.remove {
+	background: url('close_inverse.svg') center center no-repeat !important;
 }
 
 .vs .icon.filter {
@@ -122,13 +146,22 @@
 	background: url("filter_inverse.svg") center center no-repeat !important;
 }
 
-.vs .icon.remove {
-	background: url("remove.svg") center center no-repeat !important;
+.vs .icon.filterLabel {
+	background-image: url("filter.svg");
 }
 
-.vs-dark .icon.remove,
-.hc-black .icon.remove {
-	background: url("remove_inverse.svg") center center no-repeat !important;
+.vs-dark .icon.filterLabel,
+.hc-black .icon.filterLabel {
+	background-image: url("filter_inverse.svg");
+}
+
+.vs .icon.clear-filter {
+	background-image: url("clearfilter.svg");
+}
+
+.vs-dark .icon.clear-filter,
+.hc-black .icon.clear-filter {
+	background-image: url("clearfilter_inverse.svg");
 }
 
 .vs .icon.warning-badge,
@@ -207,4 +240,64 @@
 
 .vs .icon.unpin {
 	background: url('unpin.svg') center center no-repeat;
+}
+
+.vs .sql.icon.pause {
+	background-image: url('pause.svg')
+}
+
+.vs-dark .sql.icon.pause,
+.hc-black .sql.icon.pause {
+	background-image: url('pause_inverse.svg')
+}
+
+.vs .sql.icon.continue {
+	background-image: url('continue.svg')
+}
+
+.vs-dark .sql.icon.continue,
+.hc-black .sql.icon.continue {
+	background-image: url('continue_inverse.svg')
+}
+
+.vs .sql.icon.checked {
+	background-image: url('check.svg')
+}
+
+.vs-dark .sql.icon.checked,
+.hc-black .sql.icon.checked {
+	background-image: url('check_inverse.svg')
+}
+
+.vs .sql.icon.start {
+	background-image: url('start.svg')
+}
+
+.vs-dark .sql.icon.start,
+.hc-black .sql.icon.start {
+	background-image: url('start_inverse.svg')
+}
+
+.vs .sql.icon.stop {
+	background-image: url('stop.svg')
+}
+
+.vs-dark .sql.icon.stop,
+.hc-black .sql.icon.stop {
+	background-image: url('stop_inverse.svg')
+}
+
+.small {
+	width: 16px;
+	height: 16px;
+}
+
+.medium {
+	width: 24px;
+	height: 24px;
+}
+
+.large {
+	width: 32px;
+	height: 32px;
 }

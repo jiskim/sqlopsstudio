@@ -7,19 +7,21 @@
 import 'vs/css!sql/media/icons/common-icons';
 import 'vs/css!./media/taskHistoryViewlet';
 import { TPromise } from 'vs/base/common/winjs.base';
-import { Builder, Dimension } from 'vs/base/browser/builder';
 import { Viewlet } from 'vs/workbench/browser/viewlet';
 import { IViewletService } from 'vs/workbench/services/viewlet/browser/viewlet';
-import { toggleClass } from 'vs/base/browser/dom';
+import { toggleClass, Dimension } from 'vs/base/browser/dom';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
-import { IMessageService } from 'vs/platform/message/common/message';
 import { isPromiseCanceledError } from 'vs/base/common/errors';
 import Severity from 'vs/base/common/severity';
-import { IConnectionManagementService } from 'sql/parts/connection/common/connectionManagement';
+import { IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
 import { TaskHistoryView } from 'sql/parts/taskHistory/viewlet/taskHistoryView';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
+import { IPartService } from 'vs/workbench/services/part/common/partService';
+import { INotificationService } from 'vs/platform/notification/common/notification';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { IStorageService } from 'vs/platform/storage/common/storage';
 
 export const VIEWLET_ID = 'workbench.view.taskHistory';
 
@@ -32,34 +34,37 @@ export class TaskHistoryViewlet extends Viewlet {
 	constructor(
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IThemeService themeService: IThemeService,
-		@IConnectionManagementService private connectionManagementService: IConnectionManagementService,
 		@IInstantiationService private _instantiationService: IInstantiationService,
-		@IViewletService private viewletService: IViewletService,
-		@IMessageService private messageService: IMessageService
+		@INotificationService private _notificationService: INotificationService,
+		@IPartService partService: IPartService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IStorageService storageService: IStorageService
 	) {
-		super(VIEWLET_ID, telemetryService, themeService);
+		super(VIEWLET_ID, configurationService, partService, telemetryService, themeService, storageService);
 	}
 
 	private onError(err: any): void {
 		if (isPromiseCanceledError(err)) {
 			return;
 		}
-		this.messageService.show(Severity.Error, err);
+		this._notificationService.notify({
+			severity: Severity.Error,
+			message: err
+		});
 	}
 
-	public create(parent: Builder): TPromise<void> {
+	public create(parent: HTMLElement): TPromise<void> {
 		super.create(parent);
-		this._root = parent.getHTMLElement();
+		this._root = parent;
 		this._taskHistoryView = this._instantiationService.createInstance(TaskHistoryView);
-		this._taskHistoryView.renderBody(parent.getHTMLElement());
+		this._taskHistoryView.renderBody(parent);
 
 		return TPromise.as(null);
 	}
 
-	public setVisible(visible: boolean): TPromise<void> {
-		return super.setVisible(visible).then(() => {
-			this._taskHistoryView.setVisible(visible);
-		});
+	public setVisible(visible: boolean): void {
+		super.setVisible(visible);
+		this._taskHistoryView.setVisible(visible);
 	}
 
 	public focus(): void {

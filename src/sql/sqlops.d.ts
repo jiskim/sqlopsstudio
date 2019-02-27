@@ -21,6 +21,8 @@ declare module 'sqlops' {
 
 		export function registerObjectExplorerProvider(provider: ObjectExplorerProvider): vscode.Disposable;
 
+		export function registerObjectExplorerNodeProvider(provider: ObjectExplorerNodeProvider): vscode.Disposable;
+
 		export function registerTaskServicesProvider(provider: TaskServicesProvider): vscode.Disposable;
 
 		export function registerFileBrowserProvider(provider: FileBrowserProvider): vscode.Disposable;
@@ -33,7 +35,11 @@ declare module 'sqlops' {
 
 		export function registerAdminServicesProvider(provider: AdminServicesProvider): vscode.Disposable;
 
+		export function registerAgentServicesProvider(provider: AgentServicesProvider): vscode.Disposable;
+
 		export function registerCapabilitiesServiceProvider(provider: CapabilitiesProvider): vscode.Disposable;
+
+		export function registerDacFxServicesProvider(provider: DacFxServicesProvider): vscode.Disposable;
 
 		/**
 		 * An [event](#Event) which fires when the specific flavor of a language used in DMP
@@ -86,11 +92,23 @@ declare module 'sqlops' {
 		export function getActiveConnections(): Thenable<Connection[]>;
 
 		/**
+		 * Get connection string
+		*/
+		export function getConnectionString(connectionId: string, includePassword: boolean): Thenable<string>;
+
+		/**
 		 * Get the credentials for an active connection
 		 * @param {string} connectionId The id of the connection
 		 * @returns {{ [name: string]: string}} A dictionary containing the credentials as they would be included in the connection's options dictionary
 		 */
 		export function getCredentials(connectionId: string): Thenable<{ [name: string]: string }>;
+
+		/**
+		 * Get ServerInfo for a connectionId
+		 * @param {string} connectionId The id of the connection
+		 * @returns ServerInfo
+		 */
+		export function getServerInfo(connectionId: string): Thenable<ServerInfo>;
 
 		/**
 		 * Interface for representing a connection when working with connection APIs
@@ -108,10 +126,143 @@ declare module 'sqlops' {
 		}
 	}
 
+	/**
+	 * Namespace for interacting with Object Explorer
+	*/
+	export namespace objectexplorer {
+		/**
+		 * Get an Object Explorer node corresponding to the given connection and path. If no path
+		 * is given, it returns the top-level node for the given connection. If there is no node at
+		 * the given path, it returns undefined.
+		 * @param {string} connectionId The id of the connection that the node exists on
+		 * @param {string?} nodePath The path of the node to get
+		 * @returns {ObjectExplorerNode} The node corresponding to the given connection and path,
+		 * or undefined if no such node exists.
+		*/
+		export function getNode(connectionId: string, nodePath?: string): Thenable<ObjectExplorerNode>;
+
+		/**
+		 * Get all active Object Explorer connection nodes
+		 * @returns {ObjectExplorerNode[]} The Object Explorer nodes for each saved connection
+		*/
+		export function getActiveConnectionNodes(): Thenable<ObjectExplorerNode[]>;
+
+		/**
+		 * Find Object Explorer nodes that match the given information
+		 * @param {string} connectionId The id of the connection that the node exists on
+		 * @param {string} type The type of the object to retrieve
+		 * @param {string} schema The schema of the object, if applicable
+		 * @param {string} name The name of the object
+		 * @param {string} database The database the object exists under, if applicable
+		 * @param {string[]} parentObjectNames A list of names of parent objects in the tree, ordered from highest to lowest level
+		 * (for example when searching for a table's column, provide the name of its parent table for this argument)
+		 */
+		export function findNodes(connectionId: string, type: string, schema: string, name: string, database: string, parentObjectNames: string[]): Thenable<ObjectExplorerNode[]>;
+
+		/**
+		 * Get connectionProfile from sessionId
+		 * *@param {string} sessionId The id of the session that the node exists on
+		 * @returns {IConnectionProfile} The IConnecitonProfile for the session
+		 */
+		export function getSessionConnectionProfile(sessionId: string): Thenable<IConnectionProfile>;
+
+		/**
+		 * Interface for representing and interacting with items in Object Explorer
+		*/
+		export interface ObjectExplorerNode extends NodeInfo {
+			/**
+			 * The id of the connection that the node exists under
+			 */
+			connectionId: string;
+
+			/**
+			 * Whether the node is currently expanded in Object Explorer
+			 */
+			isExpanded(): Thenable<boolean>;
+
+			/**
+			 * Set whether the node is expanded or collapsed
+			 * @param expandedState The new state of the node. If 'None', the node will not be changed
+			 */
+			setExpandedState(expandedState: vscode.TreeItemCollapsibleState): Thenable<void>;
+
+			/**
+			 * Set whether the node is selected
+			 * @param selected Whether the node should be selected
+			 * @param clearOtherSelections If true, clear any other selections. If false, leave any existing selections.
+			 * Defaults to true when selected is true and false when selected is false.
+			 */
+			setSelected(selected: boolean, clearOtherSelections?: boolean): Thenable<void>;
+
+			/**
+			 * Get all the child nodes. Returns an empty list if there are no children.
+			 */
+			getChildren(): Thenable<ObjectExplorerNode[]>;
+
+			/**
+			 * Get the parent node. Returns undefined if there is none.
+			 */
+			getParent(): Thenable<ObjectExplorerNode>;
+
+			/**
+			 * Refresh the node, expanding it if it has children
+			 */
+			refresh(): Thenable<void>;
+		}
+	}
+
 	// EXPORTED INTERFACES /////////////////////////////////////////////////
 	export interface ConnectionInfo {
 
 		options: { [name: string]: any };
+	}
+
+	export interface IConnectionProfile extends ConnectionInfo {
+		connectionName: string;
+		serverName: string;
+		databaseName: string;
+		userName: string;
+		password: string;
+		authenticationType: string;
+		savePassword: boolean;
+		groupFullName: string;
+		groupId: string;
+		providerName: string;
+		saveProfile: boolean;
+		id: string;
+		azureTenantId?: string;
+	}
+
+	/**
+	* Options for the actions that could happen after connecting is complete
+	*/
+	export interface IConnectionCompletionOptions {
+		/**
+		 * Save the connection to MRU and settings (only save to setting if profile.saveProfile is set to true)
+		 * Default is true.
+		 */
+		saveConnection: boolean;
+
+		/**
+		 * If true, open the dashboard after connection is complete.
+		 * If undefined / false, dashboard won't be opened after connection completes.
+		 * Default is false.
+		 */
+		showDashboard?: boolean;
+
+		/**
+		 * If undefined / true, open the connection dialog if connection fails.
+		 * If false, connection dialog won't be opened even if connection fails.
+		 * Default is true.
+		 */
+		showConnectionDialogOnError?: boolean;
+
+		/**
+		 * If undefined / true, open the connection firewall rule dialog if connection fails.
+		 * If false, connection firewall rule dialog won't be opened even if connection fails.
+		 * Default is true.
+		 */
+		showFirewallRuleOnError?: boolean;
 	}
 
 	export interface ConnectionInfoSummary {
@@ -212,6 +363,10 @@ declare module 'sqlops' {
 		 * The Operating System version string of the machine running the instance.
 		 */
 		osVersion: string;
+		/**
+		 * options for all new server properties.
+		 */
+		options: {};
 	}
 
 	export interface DataProvider {
@@ -233,6 +388,10 @@ declare module 'sqlops' {
 
 		rebuildIntelliSenseCache(connectionUri: string): Thenable<void>;
 
+		getConnectionString(connectionUri: string, includePassword: boolean): Thenable<string>;
+
+		buildConnectionInfo?(connectionString: string): Thenable<ConnectionInfo>;
+
 		registerOnConnectionComplete(handler: (connSummary: ConnectionInfoSummary) => any): void;
 
 		registerOnIntelliSenseCacheComplete(handler: (connectionUri: string) => any): void;
@@ -241,16 +400,17 @@ declare module 'sqlops' {
 	}
 
 	export enum ServiceOptionType {
-		string = 0,
-		multistring = 1,
-		password = 2,
-		number = 3,
-		category = 4,
-		boolean = 5,
-		object = 6
+		string = 'string',
+		multistring = 'multistring',
+		password = 'password',
+		number = 'number',
+		category = 'category',
+		boolean = 'boolean',
+		object = 'object'
 	}
 
 	export enum ConnectionOptionSpecialType {
+		connectionName = 'connectionName',
 		serverName = 'serverName',
 		databaseName = 'databaseName',
 		authType = 'authType',
@@ -486,7 +646,7 @@ declare module 'sqlops' {
 
 		scriptAsOperation(connectionUri: string, operation: ScriptOperation, metadata: ObjectMetadata, paramDetails: ScriptingParamDetails): Thenable<ScriptingResult>;
 
-		registerOnScriptingComplete(handler: (scriptingCompleteResult: ScriptingCompleteResult) => any);
+		registerOnScriptingComplete(handler: (scriptingCompleteResult: ScriptingCompleteResult) => any): void;
 	}
 
 	export interface ScriptingCompleteResult {
@@ -546,6 +706,7 @@ declare module 'sqlops' {
 		runQueryStatement(ownerUri: string, line: number, column: number): Thenable<void>;
 		runQueryString(ownerUri: string, queryString: string): Thenable<void>;
 		runQueryAndReturn(ownerUri: string, queryString: string): Thenable<SimpleExecuteResult>;
+		parseSyntax(ownerUri: string, query: string): Thenable<SyntaxParseResult>;
 		getQueryRows(rowData: QueryExecuteSubsetParams): Thenable<QueryExecuteSubsetResult>;
 		disposeQuery(ownerUri: string): Thenable<void>;
 		saveResults(requestParams: SaveResultsRequestParams): Thenable<SaveResultRequestResult>;
@@ -554,7 +715,8 @@ declare module 'sqlops' {
 		registerOnQueryComplete(handler: (result: QueryExecuteCompleteNotificationResult) => any): void;
 		registerOnBatchStart(handler: (batchInfo: QueryExecuteBatchNotificationParams) => any): void;
 		registerOnBatchComplete(handler: (batchInfo: QueryExecuteBatchNotificationParams) => any): void;
-		registerOnResultSetComplete(handler: (resultSetInfo: QueryExecuteResultSetCompleteNotificationParams) => any): void;
+		registerOnResultSetAvailable(handler: (resultSetInfo: QueryExecuteResultSetNotificationParams) => any): void;
+		registerOnResultSetUpdated(handler: (resultSetInfo: QueryExecuteResultSetNotificationParams) => any): void;
 		registerOnMessage(handler: (message: QueryExecuteMessageParams) => any): void;
 
 		// Edit Data Requests
@@ -562,7 +724,7 @@ declare module 'sqlops' {
 		createRow(ownerUri: string): Thenable<EditCreateRowResult>;
 		deleteRow(ownerUri: string, rowId: number): Thenable<void>;
 		disposeEdit(ownerUri: string): Thenable<void>;
-		initializeEdit(ownerUri: string, schemaName: string, objectName: string, objectType: string, rowLimit: number): Thenable<void>;
+		initializeEdit(ownerUri: string, schemaName: string, objectName: string, objectType: string, rowLimit: number, queryString: string): Thenable<void>;
 		revertCell(ownerUri: string, rowId: number, columnId: number): Thenable<EditRevertCellResult>;
 		revertRow(ownerUri: string, rowId: number): Thenable<void>;
 		updateCell(ownerUri: string, rowId: number, columnId: number, newValue: string): Thenable<EditUpdateCellResult>;
@@ -629,6 +791,7 @@ declare module 'sqlops' {
 		batchId: number;
 		rowCount: number;
 		columnInfo: IDbColumn[];
+		complete: boolean;
 	}
 
 	export interface BatchSummary {
@@ -680,6 +843,16 @@ declare module 'sqlops' {
 		rows: DbCellValue[][];
 	}
 
+	export interface SyntaxParseParams {
+		ownerUri: string;
+		query: string;
+	}
+
+	export interface SyntaxParseResult {
+		parseable: boolean;
+		errors: string[];
+	}
+
 	// Query Batch Notification -----------------------------------------------------------------------
 	export interface QueryExecuteBatchNotificationParams {
 		batchSummary: BatchSummary;
@@ -687,7 +860,7 @@ declare module 'sqlops' {
 	}
 
 
-	export interface QueryExecuteResultSetCompleteNotificationParams {
+	export interface QueryExecuteResultSetNotificationParams {
 		resultSetSummary: ResultSetSummary;
 		ownerUri: string;
 	}
@@ -709,6 +882,7 @@ declare module 'sqlops' {
 	export interface DbCellValue {
 		displayValue: string;
 		isNull: boolean;
+		invariantCultureDisplayValue: string;
 	}
 
 	export interface ResultSetSubset {
@@ -728,7 +902,7 @@ declare module 'sqlops' {
 	// Save Results ===============================================================================
 	export interface SaveResultsRequestParams {
 		/**
-		 * 'csv', 'json', 'excel'
+		 * 'csv', 'json', 'excel', 'xml'
 		 */
 		resultFormat: string;
 		ownerUri: string;
@@ -740,6 +914,11 @@ declare module 'sqlops' {
 		columnStartIndex: number;
 		columnEndIndex: number;
 		includeHeaders?: boolean;
+		delimiter?: string;
+		lineSeperator?: string;
+		textIdentifier?: string;
+		encoding?: string;
+		formatted?: boolean;
 	}
 
 	export interface SaveResultRequestResult {
@@ -790,6 +969,7 @@ declare module 'sqlops' {
 		objectName: string;
 		schemaName: string;
 		objectType: string;
+		queryString: string;
 	}
 
 
@@ -832,6 +1012,10 @@ declare module 'sqlops' {
 		subset: EditRow[];
 	}
 
+	/**
+	 * A NodeInfo object represents an element in the Object Explorer tree under
+	 * a connection.
+	 */
 	export interface NodeInfo {
 		nodePath: string;
 		nodeType: string;
@@ -841,6 +1025,124 @@ declare module 'sqlops' {
 		isLeaf: boolean;
 		metadata: ObjectMetadata;
 		errorMessage: string;
+		/**
+		 * Optional iconType for the object in the tree. Currently this only supports
+		 * an icon name or SqlThemeIcon name, rather than a path to an icon.
+		 * If not defined, the nodeType + nodeStatus / nodeSubType values
+		 * will be used instead.
+		 */
+		iconType?: string | SqlThemeIcon;
+		/**
+		 * Informs who provides the children to a node, used by data explorer tree view api
+		 */
+		childProvider?: string;
+		/**
+		 * Holds the connection profile for nodes, used by data explorer tree view api
+		 */
+		payload?: any;
+	}
+
+	/**
+	 * A reference to a named icon. Currently only a subset of the SQL icons are available.
+	 * Using a theme icon is preferred over a custom icon as it gives theme authors the possibility to change the icons.
+	 */
+	export class SqlThemeIcon {
+		static readonly Folder: SqlThemeIcon;
+		static readonly Root: SqlThemeIcon;
+		static readonly Database: SqlThemeIcon;
+		static readonly Server: SqlThemeIcon;
+		static readonly ScalarValuedFunction: SqlThemeIcon;
+		static readonly TableValuedFunction: SqlThemeIcon;
+		static readonly AggregateFunction: SqlThemeIcon;
+		static readonly FileGroup: SqlThemeIcon;
+		static readonly StoredProcedure: SqlThemeIcon;
+		static readonly UserDefinedTableType: SqlThemeIcon;
+		static readonly View: SqlThemeIcon;
+		static readonly Table: SqlThemeIcon;
+		static readonly HistoryTable: SqlThemeIcon;
+		static readonly ServerLevelLinkedServerLogin: SqlThemeIcon;
+		static readonly ServerLevelServerAudit: SqlThemeIcon;
+		static readonly ServerLevelCryptographicProvider: SqlThemeIcon;
+		static readonly ServerLevelCredential: SqlThemeIcon;
+		static readonly ServerLevelServerRole: SqlThemeIcon;
+		static readonly ServerLevelLogin: SqlThemeIcon;
+		static readonly ServerLevelServerAuditSpecification: SqlThemeIcon;
+		static readonly ServerLevelServerTrigger: SqlThemeIcon;
+		static readonly ServerLevelLinkedServer: SqlThemeIcon;
+		static readonly ServerLevelEndpoint: SqlThemeIcon;
+		static readonly Synonym: SqlThemeIcon;
+		static readonly DatabaseTrigger: SqlThemeIcon;
+		static readonly Assembly: SqlThemeIcon;
+		static readonly MessageType: SqlThemeIcon;
+		static readonly Contract: SqlThemeIcon;
+		static readonly Queue: SqlThemeIcon;
+		static readonly Service: SqlThemeIcon;
+		static readonly Route: SqlThemeIcon;
+		static readonly DatabaseAndQueueEventNotification: SqlThemeIcon;
+		static readonly RemoteServiceBinding: SqlThemeIcon;
+		static readonly BrokerPriority: SqlThemeIcon;
+		static readonly FullTextCatalog: SqlThemeIcon;
+		static readonly FullTextStopList: SqlThemeIcon;
+		static readonly SqlLogFile: SqlThemeIcon;
+		static readonly PartitionFunction: SqlThemeIcon;
+		static readonly PartitionScheme: SqlThemeIcon;
+		static readonly SearchPropertyList: SqlThemeIcon;
+		static readonly User: SqlThemeIcon;
+		static readonly Schema: SqlThemeIcon;
+		static readonly AsymmetricKey: SqlThemeIcon;
+		static readonly Certificate: SqlThemeIcon;
+		static readonly SymmetricKey: SqlThemeIcon;
+		static readonly DatabaseEncryptionKey: SqlThemeIcon;
+		static readonly MasterKey: SqlThemeIcon;
+		static readonly DatabaseAuditSpecification: SqlThemeIcon;
+		static readonly Column: SqlThemeIcon;
+		static readonly Key: SqlThemeIcon;
+		static readonly Constraint: SqlThemeIcon;
+		static readonly Trigger: SqlThemeIcon;
+		static readonly Index: SqlThemeIcon;
+		static readonly Statistic: SqlThemeIcon;
+		static readonly UserDefinedDataType: SqlThemeIcon;
+		static readonly UserDefinedType: SqlThemeIcon;
+		static readonly XmlSchemaCollection: SqlThemeIcon;
+		static readonly SystemExactNumeric: SqlThemeIcon;
+		static readonly SystemApproximateNumeric: SqlThemeIcon;
+		static readonly SystemDateAndTime: SqlThemeIcon;
+		static readonly SystemCharacterString: SqlThemeIcon;
+		static readonly SystemUnicodeCharacterString: SqlThemeIcon;
+		static readonly SystemBinaryString: SqlThemeIcon;
+		static readonly SystemOtherDataType: SqlThemeIcon;
+		static readonly SystemClrDataType: SqlThemeIcon;
+		static readonly SystemSpatialDataType: SqlThemeIcon;
+		static readonly UserDefinedTableTypeColumn: SqlThemeIcon;
+		static readonly UserDefinedTableTypeKey: SqlThemeIcon;
+		static readonly UserDefinedTableTypeConstraint: SqlThemeIcon;
+		static readonly StoredProcedureParameter: SqlThemeIcon;
+		static readonly TableValuedFunctionParameter: SqlThemeIcon;
+		static readonly ScalarValuedFunctionParameter: SqlThemeIcon;
+		static readonly AggregateFunctionParameter: SqlThemeIcon;
+		static readonly DatabaseRole: SqlThemeIcon;
+		static readonly ApplicationRole: SqlThemeIcon;
+		static readonly FileGroupFile: SqlThemeIcon;
+		static readonly SystemMessageType: SqlThemeIcon;
+		static readonly SystemContract: SqlThemeIcon;
+		static readonly SystemService: SqlThemeIcon;
+		static readonly SystemQueue: SqlThemeIcon;
+		static readonly Sequence: SqlThemeIcon;
+		static readonly SecurityPolicy: SqlThemeIcon;
+		static readonly DatabaseScopedCredential: SqlThemeIcon;
+		static readonly ExternalResource: SqlThemeIcon;
+		static readonly ExternalDataSource: SqlThemeIcon;
+		static readonly ExternalFileFormat: SqlThemeIcon;
+		static readonly ExternalTable: SqlThemeIcon;
+		static readonly ColumnMasterKey: SqlThemeIcon;
+		static readonly ColumnEncryptionKey: SqlThemeIcon;
+
+		private constructor(id: string);
+
+		/**
+		 * Gets the ID for the theme icon for help in cases where string comparison is needed
+		 */
+		public readonly id: string;
 	}
 
 	// Object Explorer interfaces  -----------------------------------------------------------------------
@@ -867,6 +1169,15 @@ declare module 'sqlops' {
 		nodePath: string;
 	}
 
+	export interface FindNodesInfo {
+		sessionId: string;
+		type: string;
+		schema: string;
+		name: string;
+		database: string;
+		parentObjectNames: string[];
+	}
+
 	export interface ObjectExplorerCloseSessionInfo {
 		sessionId: string;
 	}
@@ -876,19 +1187,45 @@ declare module 'sqlops' {
 		success: boolean;
 	}
 
-	export interface ObjectExplorerProvider extends DataProvider {
-		createNewSession(connInfo: ConnectionInfo): Thenable<ObjectExplorerSessionResponse>;
+	export interface ObjectExplorerFindNodesResponse {
+		nodes: NodeInfo[];
+	}
 
+	export interface ObjectExplorerProviderBase extends DataProvider {
 		expandNode(nodeInfo: ExpandNodeInfo): Thenable<boolean>;
 
 		refreshNode(nodeInfo: ExpandNodeInfo): Thenable<boolean>;
 
+		findNodes(findNodesInfo: FindNodesInfo): Thenable<ObjectExplorerFindNodesResponse>;
+
+		registerOnExpandCompleted(handler: (response: ObjectExplorerExpandInfo) => any): void;
+	}
+
+	export interface ObjectExplorerProvider extends ObjectExplorerProviderBase {
+		createNewSession(connInfo: ConnectionInfo): Thenable<ObjectExplorerSessionResponse>;
+
 		closeSession(closeSessionInfo: ObjectExplorerCloseSessionInfo): Thenable<ObjectExplorerCloseSessionResponse>;
 
-		registerOnSessionCreated(handler: (response: ObjectExplorerSession) => any);
+		registerOnSessionCreated(handler: (response: ObjectExplorerSession) => any): void;
 
-		registerOnExpandCompleted(handler: (response: ObjectExplorerExpandInfo) => any);
+		registerOnSessionDisconnected?(handler: (response: ObjectExplorerSession) => any): void;
+	}
 
+	export interface ObjectExplorerNodeProvider extends ObjectExplorerProviderBase {
+		/**
+		 * The providerId for whichever type of ObjectExplorer connection this can add folders and objects to
+		 */
+		readonly supportedProviderId: string;
+
+		/**
+		 * Optional group name used to sort nodes in the tree. If not defined, the node order will be added in order based on provider ID, with
+		 * nodes from the main ObjectExplorerProvider for this provider type added first
+		 */
+		readonly group?: string;
+
+		handleSessionOpen(session: ObjectExplorerSession): Thenable<boolean>;
+
+		handleSessionClose(closeSessionInfo: ObjectExplorerCloseSessionInfo): void;
 	}
 
 	// Admin Services interfaces  -----------------------------------------------------------------------
@@ -920,14 +1257,473 @@ declare module 'sqlops' {
 		getDatabaseInfo(connectionUri: string): Thenable<DatabaseInfo>;
 	}
 
+	// Agent Services types
+	export enum WeekDays {
+		sunday = 1,
+		monday = 2,
+		tuesday = 4,
+		wednesday = 8,
+		thursday = 16,
+		friday = 32,
+		weekDays = 62,
+		saturday = 64,
+		weekEnds = 65,
+		everyDay = 127
+	}
+
+	export enum NotifyMethods {
+		none = 0,
+		notifyEmail = 1,
+		pager = 2,
+		netSend = 4,
+		notifyAll = 7
+	}
+
+	export enum AlertType {
+		sqlServerEvent = 1,
+		sqlServerPerformanceCondition = 2,
+		nonSqlServerEvent = 3,
+		wmiEvent = 4
+	}
+
+	export enum JobCompletionActionCondition {
+		Never = 0,
+		OnSuccess = 1,
+		OnFailure = 2,
+		Always = 3
+	}
+
+	export enum FrequencyTypes {
+		Unknown,
+		OneTime = 1 << 1,
+		Daily = 1 << 2,
+		Weekly = 1 << 3,
+		Monthly = 1 << 4,
+		MonthlyRelative = 1 << 5,
+		AutoStart = 1 << 6,
+		OnIdle = 1 << 7
+	}
+
+	export enum FrequencySubDayTypes {
+		Unknown = 0,
+		Once = 1,
+		Second = 2,
+		Minute = 4,
+		Hour = 8
+	}
+
+	export enum FrequencyRelativeIntervals {
+		First = 1,
+		Second = 2,
+		Third = 4,
+		Fourth = 8,
+		Last = 16
+	}
+
+	export enum JobExecutionStatus {
+		Executing = 1,
+		WaitingForWorkerThread = 2,
+		BetweenRetries = 3,
+		Idle = 4,
+		Suspended = 5,
+		WaitingForStepToFinish = 6,
+		PerformingCompletionAction = 7
+	}
+
+	export interface AgentJobInfo {
+		name: string;
+		owner: string;
+		description: string;
+		currentExecutionStatus: number;
+		lastRunOutcome: number;
+		currentExecutionStep: string;
+		enabled: boolean;
+		hasTarget: boolean;
+		hasSchedule: boolean;
+		hasStep: boolean;
+		runnable: boolean;
+		category: string;
+		categoryId: number;
+		categoryType: number;
+		lastRun: string;
+		nextRun: string;
+		jobId: string;
+		startStepId: number;
+		emailLevel: JobCompletionActionCondition;
+		pageLevel: JobCompletionActionCondition;
+		eventLogLevel: JobCompletionActionCondition;
+		deleteLevel: JobCompletionActionCondition;
+		operatorToEmail: string;
+		operatorToPage: string;
+		jobSteps: AgentJobStepInfo[];
+		jobSchedules: AgentJobScheduleInfo[];
+		alerts: AgentAlertInfo[];
+	}
+
+	export interface AgentJobScheduleInfo {
+		id: number;
+		name: string;
+		jobName: string;
+		isEnabled: boolean;
+		frequencyTypes: FrequencyTypes;
+		frequencySubDayTypes: FrequencySubDayTypes;
+		frequencySubDayInterval: number;
+		frequencyRelativeIntervals: FrequencyRelativeIntervals;
+		frequencyRecurrenceFactor: number;
+		frequencyInterval: number;
+		dateCreated: string;
+		activeStartTimeOfDay: string;
+		activeStartDate: string;
+		activeEndTimeOfDay: string;
+		jobCount: number;
+		activeEndDate: string;
+		scheduleUid: string;
+		description: string;
+	}
+
+	export interface AgentJobStep {
+		jobId: string;
+		stepId: string;
+		stepName: string;
+		message: string;
+		runDate: string;
+		runStatus: number;
+		stepDetails: AgentJobStepInfo;
+	}
+
+	export interface AgentJobStepInfo {
+		jobId: string;
+		jobName: string;
+		script: string;
+		scriptName: string;
+		stepName: string;
+		subSystem: string;
+		id: number;
+		failureAction: string;
+		successAction: string;
+		failStepId: number;
+		successStepId: number;
+		command: string;
+		commandExecutionSuccessCode: number;
+		databaseName: string;
+		databaseUserName: string;
+		server: string;
+		outputFileName: string;
+		appendToLogFile: boolean;
+		appendToStepHist: boolean;
+		writeLogToTable: boolean;
+		appendLogToTable: boolean;
+		retryAttempts: number;
+		retryInterval: number;
+		proxyName: string;
+	}
+
+	export interface AgentJobHistoryInfo {
+		instanceId: number;
+		sqlMessageId: string;
+		message: string;
+		stepId: string;
+		stepName: string;
+		sqlSeverity: string;
+		jobId: string;
+		jobName: string;
+		runStatus: number;
+		runDate: string;
+		runDuration: string;
+		operatorEmailed: string;
+		operatorNetsent: string;
+		operatorPaged: string;
+		retriesAttempted: string;
+		server: string;
+		steps: AgentJobStep[];
+	}
+
+	export interface AgentProxyInfo {
+		id: number;
+		accountName: string;
+		description: string;
+		credentialName: string;
+		credentialIdentity: string;
+		credentialId: number;
+		isEnabled: boolean;
+	}
+
+	export interface AgentAlertInfo {
+		id: number;
+		name: string;
+		delayBetweenResponses: number;
+		eventDescriptionKeyword: string;
+		eventSource: string;
+		hasNotification: number;
+		includeEventDescription: NotifyMethods;
+		isEnabled: boolean;
+		jobId: string;
+		jobName: string;
+		lastOccurrenceDate: string;
+		lastResponseDate: string;
+		messageId: number;
+		notificationMessage: string;
+		occurrenceCount: number;
+		performanceCondition: string;
+		severity: number;
+		databaseName: string;
+		countResetDate: string;
+		categoryName: string;
+		alertType: AlertType;
+		wmiEventNamespace: string;
+		wmiEventQuery: string;
+	}
+
+	export interface AgentOperatorInfo {
+		name: string;
+		id: number;
+		emailAddress: string;
+		enabled: boolean;
+		lastEmailDate: string;
+		lastNetSendDate: string;
+		lastPagerDate: string;
+		pagerAddress: string;
+		categoryName: string;
+		pagerDays: WeekDays;
+		saturdayPagerEndTime: string;
+		saturdayPagerStartTime: string;
+		sundayPagerEndTime: string;
+		sundayPagerStartTime: string;
+		netSendAddress: string;
+		weekdayPagerStartTime: string;
+		weekdayPagerEndTime: string;
+	}
+
+	export interface ResultStatus {
+		success: boolean;
+		errorMessage: string;
+	}
+
+	export interface AgentJobsResult extends ResultStatus {
+		jobs: AgentJobInfo[];
+	}
+
+	export interface AgentJobHistoryResult extends ResultStatus {
+		histories: AgentJobHistoryInfo[];
+		steps: AgentJobStepInfo[];
+		schedules: AgentJobScheduleInfo[];
+		alerts: AgentAlertInfo[];
+	}
+
+	export interface CreateAgentJobResult extends ResultStatus {
+		job: AgentJobInfo;
+	}
+
+	export interface UpdateAgentJobResult extends ResultStatus {
+		job: AgentJobInfo;
+	}
+
+	export interface AgentJobCategory {
+		id: string;
+		name: string;
+	}
+
+	export interface AgentJobDefaultsResult extends ResultStatus {
+		owner: string;
+		categories: AgentJobCategory[];
+	}
+
+	export interface CreateAgentJobStepResult extends ResultStatus {
+		step: AgentJobStepInfo;
+	}
+
+	export interface UpdateAgentJobStepResult extends ResultStatus {
+		step: AgentJobStepInfo;
+	}
+
+	export interface CreateAgentProxyResult extends ResultStatus {
+		step: AgentJobStepInfo;
+	}
+
+	export interface UpdateAgentProxyResult extends ResultStatus {
+		step: AgentJobStepInfo;
+	}
+
+	export interface AgentAlertsResult extends ResultStatus {
+		alerts: AgentAlertInfo[];
+	}
+
+	export interface CreateAgentAlertResult extends ResultStatus {
+		alert: AgentJobStepInfo;
+	}
+
+	export interface UpdateAgentAlertResult extends ResultStatus {
+		alert: AgentJobStepInfo;
+	}
+
+	export interface AgentOperatorsResult extends ResultStatus {
+		operators: AgentOperatorInfo[];
+	}
+
+	export interface CreateAgentOperatorResult extends ResultStatus {
+		operator: AgentOperatorInfo;
+	}
+
+	export interface UpdateAgentOperatorResult extends ResultStatus {
+		operator: AgentOperatorInfo;
+	}
+
+	export interface AgentProxiesResult extends ResultStatus {
+		proxies: AgentProxyInfo[];
+	}
+
+	export interface CreateAgentProxyResult extends ResultStatus {
+		proxy: AgentProxyInfo;
+	}
+
+	export interface UpdateAgentProxyResult extends ResultStatus {
+		proxy: AgentProxyInfo;
+	}
+
+	export interface AgentJobSchedulesResult extends ResultStatus {
+		schedules: AgentJobScheduleInfo[];
+	}
+
+	export interface CreateAgentJobScheduleResult extends ResultStatus {
+		schedule: AgentJobScheduleInfo;
+	}
+
+	export interface UpdateAgentJobScheduleResult extends ResultStatus {
+		schedule: AgentJobScheduleInfo;
+	}
+
+	export interface AgentServicesProvider extends DataProvider {
+		// Job management methods
+		getJobs(ownerUri: string): Thenable<AgentJobsResult>;
+		getJobHistory(ownerUri: string, jobId: string, jobName: string): Thenable<AgentJobHistoryResult>;
+		jobAction(ownerUri: string, jobName: string, action: string): Thenable<ResultStatus>;
+		createJob(ownerUri: string, jobInfo: AgentJobInfo): Thenable<CreateAgentJobResult>;
+		updateJob(ownerUri: string, originalJobName: string, jobInfo: AgentJobInfo): Thenable<UpdateAgentJobResult>;
+		deleteJob(ownerUri: string, jobInfo: AgentJobInfo): Thenable<ResultStatus>;
+		getJobDefaults(ownerUri: string): Thenable<AgentJobDefaultsResult>;
+
+		// Job Step management methods
+		createJobStep(ownerUri: string, stepInfo: AgentJobStepInfo): Thenable<CreateAgentJobStepResult>;
+		updateJobStep(ownerUri: string, originalJobStepName: string, stepInfo: AgentJobStepInfo): Thenable<UpdateAgentJobStepResult>;
+		deleteJobStep(ownerUri: string, stepInfo: AgentJobStepInfo): Thenable<ResultStatus>;
+
+		// Alert management methods
+		getAlerts(ownerUri: string): Thenable<AgentAlertsResult>;
+		createAlert(ownerUri: string, alertInfo: AgentAlertInfo): Thenable<CreateAgentAlertResult>;
+		updateAlert(ownerUri: string, originalAlertName: string, alertInfo: AgentAlertInfo): Thenable<UpdateAgentAlertResult>;
+		deleteAlert(ownerUri: string, alertInfo: AgentAlertInfo): Thenable<ResultStatus>;
+
+		// Operator management methods
+		getOperators(ownerUri: string): Thenable<AgentOperatorsResult>;
+		createOperator(ownerUri: string, operatorInfo: AgentOperatorInfo): Thenable<CreateAgentOperatorResult>;
+		updateOperator(ownerUri: string, originalOperatorName: string, operatorInfo: AgentOperatorInfo): Thenable<UpdateAgentOperatorResult>;
+		deleteOperator(ownerUri: string, operatorInfo: AgentOperatorInfo): Thenable<ResultStatus>;
+
+		// Proxy management methods
+		getProxies(ownerUri: string): Thenable<AgentProxiesResult>;
+		createProxy(ownerUri: string, proxyInfo: AgentProxyInfo): Thenable<CreateAgentOperatorResult>;
+		updateProxy(ownerUri: string, originalProxyName: string, proxyInfo: AgentProxyInfo): Thenable<UpdateAgentOperatorResult>;
+		deleteProxy(ownerUri: string, proxyInfo: AgentProxyInfo): Thenable<ResultStatus>;
+
+		// Credential method
+		getCredentials(ownerUri: string): Thenable<GetCredentialsResult>;
+
+		// Job Schedule management methods
+		getJobSchedules(ownerUri: string): Thenable<AgentJobSchedulesResult>;
+		createJobSchedule(ownerUri: string, scheduleInfo: AgentJobScheduleInfo): Thenable<CreateAgentJobScheduleResult>;
+		updateJobSchedule(ownerUri: string, originalScheduleName: string, scheduleInfo: AgentJobScheduleInfo): Thenable<UpdateAgentJobScheduleResult>;
+		deleteJobSchedule(ownerUri: string, scheduleInfo: AgentJobScheduleInfo): Thenable<ResultStatus>;
+
+		registerOnUpdated(handler: () => any): void;
+	}
+
+	// DacFx interfaces  -----------------------------------------------------------------------
+	export interface DacFxResult extends ResultStatus {
+		operationId: string;
+	}
+
+	export interface GenerateDeployPlanResult extends DacFxResult {
+		report: string;
+	}
+
+	export interface ExportParams {
+		databaseName: string;
+		packageFilePath: string;
+		ownerUri: string;
+		taskExecutionMode: TaskExecutionMode;
+	}
+
+	export interface ImportParams {
+		packageFilePath: string;
+		databaseName: string;
+		ownerUri: string;
+		taskExecutionMode: TaskExecutionMode;
+	}
+
+	export interface ExtractParams {
+		databaseName: string;
+		packageFilePath: string;
+		applicationName: string;
+		applicationVersion: string;
+		ownerUri: string;
+		taskExecutionMode: TaskExecutionMode;
+	}
+
+	export interface DeployParams {
+		packageFilePath: string;
+		databaseName: string;
+		upgradeExisting: boolean;
+		ownerUri: string;
+		taskExecutionMode: TaskExecutionMode;
+	}
+
+	export interface GenerateDeployScriptParams {
+		packageFilePath: string;
+		databaseName: string;
+		scriptFilePath: string;
+		ownerUri: string;
+		taskExecutionMode: TaskExecutionMode;
+	}
+
+	export interface GenerateDeployPlan {
+		packageFilePath: string;
+		databaseName: string;
+		ownerUri: string;
+		taskExecutionMode: TaskExecutionMode;
+	}
+
+	export interface DacFxServicesProvider extends DataProvider {
+		exportBacpac(databaseName: string, packageFilePath: string, ownerUri: string, taskExecutionMode: TaskExecutionMode): Thenable<DacFxResult>;
+		importBacpac(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: TaskExecutionMode): Thenable<DacFxResult>;
+		extractDacpac(databaseName: string, packageFilePath: string, applicationName: string, applicationVersion: string, ownerUri: string, taskExecutionMode: TaskExecutionMode): Thenable<DacFxResult>;
+		deployDacpac(packageFilePath: string, databaseName: string, upgradeExisting: boolean, ownerUri: string, taskExecutionMode: TaskExecutionMode): Thenable<DacFxResult>;
+		generateDeployScript(packageFilePath: string, databaseName: string, scriptFilePath: string, ownerUri: string, taskExecutionMode: TaskExecutionMode): Thenable<DacFxResult>;
+		generateDeployPlan(packageFilePath: string, databaseName: string, ownerUri: string, taskExecutionMode: TaskExecutionMode): Thenable<GenerateDeployPlanResult>;
+	}
+
+	// Security service interfaces ------------------------------------------------------------------------
+	export interface CredentialInfo {
+		id: number;
+		identity: string;
+		name: string;
+		dateLastModified: string;
+		createDate: string;
+		providerName: string;
+	}
+
+	export interface GetCredentialsResult extends ResultStatus {
+		credentials: CredentialInfo[];
+	}
+
 	// Task service interfaces ----------------------------------------------------------------------------
 	export enum TaskStatus {
-		notStarted = 0,
-		inProgress = 1,
-		succeeded = 2,
-		succeededWithWarning = 3,
-		failed = 4,
-		canceled = 5
+		NotStarted = 0,
+		InProgress = 1,
+		Succeeded = 2,
+		SucceededWithWarning = 3,
+		Failed = 4,
+		Canceled = 5,
+		Canceling = 6
 	}
 
 	export enum TaskExecutionMode {
@@ -941,6 +1737,7 @@ declare module 'sqlops' {
 	}
 
 	export interface TaskInfo {
+		connection?: connection.Connection;
 		taskId: string;
 		status: TaskStatus;
 		taskExecutionMode: TaskExecutionMode;
@@ -964,8 +1761,7 @@ declare module 'sqlops' {
 		taskId: string;
 		status: TaskStatus;
 		message: string;
-		script: string;
-		duration: number;
+		script?: string;
 	}
 
 	export interface TaskServicesProvider extends DataProvider {
@@ -973,9 +1769,9 @@ declare module 'sqlops' {
 
 		cancelTask(cancelTaskParams: CancelTaskParams): Thenable<boolean>;
 
-		registerOnTaskCreated(handler: (response: TaskInfo) => any);
+		registerOnTaskCreated(handler: (response: TaskInfo) => any): void;
 
-		registerOnTaskStatusChanged(handler: (response: TaskProgressInfo) => any);
+		registerOnTaskStatusChanged(handler: (response: TaskProgressInfo) => any): void;
 	}
 
 	// Disaster Recovery interfaces  -----------------------------------------------------------------------
@@ -1060,13 +1856,17 @@ declare module 'sqlops' {
 	}
 
 	export interface ProfilerProvider extends DataProvider {
-		startSession(sessionId: string): Thenable<boolean>;
+		createSession(sessionId: string, sessionName: string, template: ProfilerSessionTemplate): Thenable<boolean>;
+		startSession(sessionId: string, sessionName: string): Thenable<boolean>;
 		stopSession(sessionId: string): Thenable<boolean>;
 		pauseSession(sessionId: string): Thenable<boolean>;
+		getXEventSessions(sessionId: string): Thenable<string[]>;
 		connectSession(sessionId: string): Thenable<boolean>;
 		disconnectSession(sessionId: string): Thenable<boolean>;
 
-		registerOnSessionEventsAvailable(handler: (response: ProfilerSessionEvents) => any);
+		registerOnSessionEventsAvailable(handler: (response: ProfilerSessionEvents) => any): void;
+		registerOnSessionStopped(handler: (response: ProfilerSessionStoppedParams) => any): void;
+		registerOnProfilerSessionCreated(handler: (response: ProfilerSessionCreatedParams) => any): void;
 	}
 
 	export interface IProfilerTableRow {
@@ -1103,21 +1903,56 @@ declare module 'sqlops' {
 		values: {};
 	}
 
+	/**
+	 * Profiler Session Template
+	 */
+	export interface ProfilerSessionTemplate {
+		/**
+		 * Template name
+		 */
+		name: string;
+
+		/**
+		 * Default view for template
+		 */
+		defaultView: string;
+
+		/**
+		 * TSQL for creating a session
+		 */
+		createStatement: string;
+	}
+
 	export interface ProfilerSessionEvents {
 		sessionId: string;
 
 		events: ProfilerEvent[];
+
+		eventsLost: boolean;
+	}
+
+	export interface ProfilerSessionStoppedParams {
+
+		ownerUri: string;
+
+		sessionId: number;
+	}
+
+	export interface ProfilerSessionCreatedParams {
+		ownerUri: string;
+		sessionName: string;
+		templateName: string;
 	}
 
 	// File browser interfaces  -----------------------------------------------------------------------
 
 	export interface FileBrowserProvider extends DataProvider {
 		openFileBrowser(ownerUri: string, expandPath: string, fileFilters: string[], changeFilter: boolean): Thenable<boolean>;
-		registerOnFileBrowserOpened(handler: (response: FileBrowserOpenedParams) => any);
+		registerOnFileBrowserOpened(handler: (response: FileBrowserOpenedParams) => any): void;
 		expandFolderNode(ownerUri: string, expandPath: string): Thenable<boolean>;
-		registerOnFolderNodeExpanded(handler: (response: FileBrowserExpandedParams) => any);
+		registerOnFolderNodeExpanded(handler: (response: FileBrowserExpandedParams) => any): void;
 		validateFilePaths(ownerUri: string, serviceType: string, selectedFiles: string[]): Thenable<boolean>;
-		registerOnFilePathsValidated(handler: (response: FileBrowserValidatedParams) => any);
+		registerOnFilePathsValidated(handler: (response: FileBrowserValidatedParams) => any): void;
 		closeFileBrowser(ownerUri: string): Thenable<FileBrowserCloseResponse>;
 	}
 
@@ -1186,6 +2021,25 @@ declare module 'sqlops' {
 		 * @param {Account} updatedAccount Account object with updated properties
 		 */
 		export function accountUpdated(updatedAccount: Account): void;
+
+		/**
+		 * Gets all added accounts.
+		 * @returns {Thenable<Account>} Promise to return the accounts
+		 */
+		export function getAllAccounts(): Thenable<Account[]>;
+
+		/**
+		 * Generates a security token by asking the account's provider
+		 * @param {Account} account Account to generate security token for (defaults to
+		 * AzureResource.ResourceManagement if not given)
+		 * @return {Thenable<{}>} Promise to return the security token
+		 */
+		export function getSecurityToken(account: Account, resource?: AzureResource): Thenable<{}>;
+
+		/**
+		 * An [event](#Event) which fires when the accounts have changed.
+		 */
+		export const onDidChangeAccounts: vscode.Event<DidChangeAccountsParams>;
 	}
 
 	/**
@@ -1253,6 +2107,16 @@ declare module 'sqlops' {
 		isStale: boolean;
 	}
 
+	export enum AzureResource {
+		ResourceManagement = 0,
+		Sql = 1
+	}
+
+	export interface DidChangeAccountsParams {
+		// Updated accounts
+		accounts: Account[];
+	}
+
 	// - ACCOUNT PROVIDER //////////////////////////////////////////////////
 	/**
 	 * Error to be used when the user has cancelled the prompt or refresh methods. When
@@ -1305,9 +2169,10 @@ declare module 'sqlops' {
 		/**
 		 * Generates a security token for the provided account
 		 * @param {Account} account The account to generate a security token for
+		 * @param {AzureResource} resource The resource to get the token for
 		 * @return {Thenable<{}>} Promise to return a security token object
 		 */
-		getSecurityToken(account: Account): Thenable<{}>;
+		getSecurityToken(account: Account, resource: AzureResource): Thenable<{}>;
 
 		/**
 		 * Prompts the user to enter account information.
@@ -1485,11 +2350,54 @@ declare module 'sqlops' {
 
 	export namespace window {
 		/**
-		 * creates a dialog
+		 * @deprecated this method has been deprecated and will be removed in a future release, please use sqlops.window.createWebViewDialog instead.
 		 * @param title
 		 */
 		export function createDialog(
 			title: string
 		): ModalDialog;
+	}
+
+	export namespace workspace {
+		/**
+		 * An event that is emitted when a [dashboard](#DashboardDocument) is opened.
+		 */
+		export const onDidOpenDashboard: vscode.Event<DashboardDocument>;
+
+		/**
+		 * An event that is emitted when a [dashboard](#DashboardDocument) is focused.
+		 */
+		export const onDidChangeToDashboard: vscode.Event<DashboardDocument>;
+	}
+
+	export interface DashboardDocument {
+		profile: IConnectionProfile;
+		serverInfo: ServerInfo;
+	}
+
+	export class TreeItem extends vscode.TreeItem {
+		payload?: IConnectionProfile;
+		childProvider?: string;
+	}
+
+	export namespace tasks {
+
+		export interface ITaskHandler {
+			(profile: IConnectionProfile, ...args: any[]): any;
+		}
+
+		/**
+		* Registers a task that can be invoked via a keyboard shortcut,
+		* a menu item, an action, or directly.
+		*
+		* Registering a task with an existing task identifier twice
+		* will cause an error.
+		*
+		* @param task A unique identifier for the task.
+		* @param callback A task handler function.
+		* @param thisArg The `this` context used when invoking the handler function.
+		* @return Disposable which unregisters this task on disposal.
+		*/
+		export function registerTask(task: string, callback: ITaskHandler, thisArg?: any): vscode.Disposable;
 	}
 }

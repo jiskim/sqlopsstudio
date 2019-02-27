@@ -2,11 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import { InlineDecoration, InlineDecorationType } from 'vs/editor/common/viewModel/viewModel';
-import { Constants } from 'vs/editor/common/core/uint';
 import * as strings from 'vs/base/common/strings';
+import { Constants } from 'vs/editor/common/core/uint';
+import { InlineDecoration, InlineDecorationType } from 'vs/editor/common/viewModel/viewModel';
 
 export class LineDecoration {
 	_lineDecorationBrand: void;
@@ -58,7 +57,7 @@ export class LineDecoration {
 				continue;
 			}
 
-			if (range.isEmpty() && d.type === InlineDecorationType.Regular) {
+			if (range.isEmpty() && (d.type === InlineDecorationType.Regular || d.type === InlineDecorationType.RegularAffectingLetterSpacing)) {
 				// Ignore empty range decorations
 				continue;
 			}
@@ -115,7 +114,7 @@ class Stack {
 	public consumeLowerThan(maxStopOffset: number, nextStartOffset: number, result: DecorationSegment[]): number {
 
 		while (this.count > 0 && this.stopOffsets[0] < maxStopOffset) {
-			var i = 0;
+			let i = 0;
 
 			// Take all equal stopping offsets
 			while (i + 1 < this.count && this.stopOffsets[i] === this.stopOffsets[i + 1]) {
@@ -147,7 +146,7 @@ class Stack {
 			this.classNames.push(className);
 		} else {
 			// Find the insertion position for `stopOffset`
-			for (var i = 0; i < this.count; i++) {
+			for (let i = 0; i < this.count; i++) {
 				if (this.stopOffsets[i] >= stopOffset) {
 					this.stopOffsets.splice(i, 0, stopOffset);
 					this.classNames.splice(i, 0, className);

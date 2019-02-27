@@ -3,8 +3,13 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable } from 'vs/base/common/lifecycle';
-import Event from 'vs/base/common/event';
+import { OnDestroy } from '@angular/core';
+
+import { Event } from 'vs/base/common/event';
+import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
+
+import { TabChild } from 'sql/base/browser/ui/panel/tab.component';
+import { SingleConnectionManagementService } from 'sql/services/common/commonServiceInterface.service';
 
 export enum Conditional {
 	'equals',
@@ -16,7 +21,7 @@ export enum Conditional {
 	'always'
 }
 
-export abstract class DashboardTab extends Disposable {
+export abstract class DashboardTab extends TabChild implements OnDestroy {
 	public abstract layout(): void;
 	public abstract readonly id: string;
 	public abstract readonly editable: boolean;
@@ -25,4 +30,16 @@ export abstract class DashboardTab extends Disposable {
 	public enableEdit(): void {
 		// no op
 	}
+	constructor() {
+		super();
+	}
+
+	ngOnDestroy() {
+		this.dispose();
+	}
+}
+
+export interface IConfigModifierCollection {
+	connectionManagementService: SingleConnectionManagementService;
+	contextKeyService: IContextKeyService;
 }

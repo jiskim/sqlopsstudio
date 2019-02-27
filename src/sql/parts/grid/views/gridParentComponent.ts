@@ -13,19 +13,20 @@ import 'vs/css!sql/parts/grid/media/slickGrid';
 
 import { Subscription, Subject } from 'rxjs/Rx';
 import { ElementRef, QueryList, ChangeDetectorRef, ViewChildren } from '@angular/core';
-import { IGridDataRow, ISlickRange, SlickGrid, FieldType } from 'angular2-slickgrid';
-import { toDisposableSubscription } from 'sql/parts/common/rxjsUtils';
+import { SlickGrid } from 'angular2-slickgrid';
+import { toDisposableSubscription } from 'sql/base/node/rxjsUtils';
 import * as Constants from 'sql/parts/query/common/constants';
 import * as LocalizedConstants from 'sql/parts/query/common/localizedConstants';
 import { IGridInfo, IGridDataSet, SaveFormat } from 'sql/parts/grid/common/interfaces';
-import * as Utils from 'sql/parts/connection/common/utils';
+import * as Utils from 'sql/platform/connection/common/utils';
 import { DataService } from 'sql/parts/grid/services/dataService';
 import * as actions from 'sql/parts/grid/views/gridActions';
 import * as Services from 'sql/parts/grid/services/sharedServices';
 import * as GridContentEvents from 'sql/parts/grid/common/gridContentEvents';
-import { ResultsVisibleContext, ResultsGridFocussedContext, ResultsMessagesFocussedContext } from 'sql/parts/query/common/queryContext';
-import { IBootstrapService } from 'sql/services/bootstrap/bootstrapService';
+import { ResultsVisibleContext, ResultsGridFocussedContext, ResultsMessagesFocussedContext, QueryEditorVisibleContext } from 'sql/parts/query/common/queryContext';
 import { error } from 'sql/base/common/log';
+import { IQueryEditorService } from 'sql/workbench/services/queryEditor/common/queryEditorService';
+import { CellSelectionModel } from 'sql/base/browser/ui/table/plugins/cellSelectionModel.plugin';
 
 import { IAction } from 'vs/base/common/actions';
 import { ResolvedKeybinding } from 'vs/base/common/keyCodes';
@@ -33,20 +34,16 @@ import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { IContextKeyService, IContextKey } from 'vs/platform/contextkey/common/contextkey';
 import { IContextMenuService } from 'vs/platform/contextview/browser/contextView';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
-import { AutoColumnSize } from 'sql/base/browser/ui/table/plugins/autoSizeColumns.plugin';
-import { DragCellSelectionModel } from 'sql/base/browser/ui/table/plugins/dragCellSelectionModel.plugin';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { IClipboardService } from 'vs/platform/clipboard/common/clipboardService';
+import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
+import { INotificationService } from 'vs/platform/notification/common/notification';
 
 export abstract class GridParentComponent {
 	// CONSTANTS
 	// tslint:disable:no-unused-variable
-	protected get selectionModel(): DragCellSelectionModel<any> {
-		return new DragCellSelectionModel<any>();
-	}
-	protected get slickgridPlugins(): Array<any> {
-		return [
-			new AutoColumnSize<any>({})
-		];
-	}
+
+	protected get selectionModel() { return new CellSelectionModel(); }
 	protected _rowHeight = 29;
 	protected _defaultNumShowingRows = 8;
 	protected Constants = Constants;
@@ -62,9 +59,6 @@ export abstract class GridParentComponent {
 	// FIELDS
 	// Service for interaction with the IQueryModel
 	protected dataService: DataService;
-	protected keybindingService: IKeybindingService;
-	protected scopedContextKeyService: IContextKeyService;
-	protected contextMenuService: IContextMenuService;
 	protected actionProvider: actions.GridActionProvider;
 
 	protected toDispose: IDisposable[];
@@ -74,6 +68,7 @@ export abstract class GridParentComponent {
 	private resultsVisibleContextKey: IContextKey<boolean>;
 	private gridFocussedContextKey: IContextKey<boolean>;
 	private messagesFocussedContextKey: IContextKey<boolean>;
+	private queryEditorVisible: IContextKey<boolean>;
 
 	// All datasets
 	// Place holder data sets to buffer between data sets and rendered data sets
@@ -86,22 +81,12 @@ export abstract class GridParentComponent {
 
 	@ViewChildren('slickgrid') slickgrids: QueryList<SlickGrid>;
 
-	// Edit Data functions
-	public onActiveCellChanged: (event: { row: number, column: number }) => void;
-	public onCellEditEnd: (event: { row: number, column: number, newValue: any }) => void;
-	public onCellEditBegin: (event: { row: number, column: number }) => void;
-	public onRowEditBegin: (event: { row: number }) => void;
-	public onRowEditEnd: (event: { row: number }) => void;
-	public onIsCellEditValid: (row: number, column: number, newValue: any) => boolean;
-	public onIsColumnEditable: (column: number) => boolean;
-	public overrideCellFn: (rowNumber, columnId, value?, data?) => string;
-	public loadDataFunction: (offset: number, count: number) => Promise<IGridDataRow[]>;
-
 	set messageActive(input: boolean) {
 		this._messageActive = input;
 		if (this.resultActive) {
 			this.resizeGrids();
 		}
+		this._cd.detectChanges();
 	}
 
 	get messageActive(): boolean {
@@ -111,7 +96,13 @@ export abstract class GridParentComponent {
 	constructor(
 		protected _el: ElementRef,
 		protected _cd: ChangeDetectorRef,
-		protected _bootstrapService: IBootstrapService
+		protected contextMenuService: IContextMenuService,
+		protected keybindingService: IKeybindingService,
+		protected contextKeyService: IContextKeyService,
+		protected configurationService: IConfigurationService,
+		protected clipboardService: IClipboardService,
+		protected queryEditorService: IQueryEditorService,
+		protected notificationService: INotificationService
 	) {
 		this.toDispose = [];
 	}
@@ -119,8 +110,8 @@ export abstract class GridParentComponent {
 	protected baseInit(): void {
 		const self = this;
 		this.initShortcutsBase();
-		if (this._bootstrapService.configurationService) {
-			let sqlConfig = this._bootstrapService.configurationService.getValue('sql');
+		if (this.configurationService) {
+			let sqlConfig = this.configurationService.getValue('sql');
 			if (sqlConfig) {
 				this._messageActive = sqlConfig['messagesDefaultOpen'];
 			}
@@ -163,16 +154,25 @@ export abstract class GridParentComponent {
 				case GridContentEvents.SaveAsExcel:
 					self.sendSaveRequest(SaveFormat.EXCEL);
 					break;
+				case GridContentEvents.SaveAsXML:
+					self.sendSaveRequest(SaveFormat.XML);
+					break;
+				case GridContentEvents.GoToNextQueryOutputTab:
+					self.goToNextQueryOutputTab();
+					break;
+				case GridContentEvents.ViewAsChart:
+					self.showChartForGrid(self.activeGrid);
+					break;
+				case GridContentEvents.GoToNextGrid:
+					self.goToNextGrid();
+					break;
 				default:
 					error('Unexpected grid content event type "' + type + '" sent');
 					break;
 			}
 		});
 
-		this.contextMenuService = this._bootstrapService.contextMenuService;
-		this.keybindingService = this._bootstrapService.keybindingService;
-
-		this.bindKeys(this._bootstrapService.contextKeyService);
+		this.bindKeys(this.contextKeyService);
 	}
 
 	/*
@@ -186,7 +186,10 @@ export abstract class GridParentComponent {
 
 	private bindKeys(contextKeyService: IContextKeyService): void {
 		if (contextKeyService) {
-			let gridContextKeyService = this._bootstrapService.contextKeyService.createScoped(this._el.nativeElement);
+			this.queryEditorVisible = QueryEditorVisibleContext.bindTo(contextKeyService);
+			this.queryEditorVisible.set(true);
+
+			let gridContextKeyService = this.contextKeyService.createScoped(this._el.nativeElement);
 			this.toDispose.push(gridContextKeyService);
 			this.resultsVisibleContextKey = ResultsVisibleContext.bindTo(gridContextKeyService);
 			this.resultsVisibleContextKey.set(true);
@@ -200,11 +203,15 @@ export abstract class GridParentComponent {
 		this.toDispose = dispose(this.toDispose);
 	}
 
-	private toggleResultPane(): void {
+	protected toggleResultPane(): void {
 		this.resultActive = !this.resultActive;
+		if (this.resultActive) {
+			this.resizeGrids();
+		}
+		this._cd.detectChanges();
 	}
 
-	private toggleMessagePane(): void {
+	protected toggleMessagePane(): void {
 		this.messageActive = !this.messageActive;
 	}
 
@@ -224,21 +231,29 @@ export abstract class GridParentComponent {
 		this.messagesFocussedContextKey.set(false);
 	}
 
+	protected getSelection(index?: number): Slick.Range[] {
+		let selection = this.slickgrids.toArray()[index || this.activeGrid].getSelectedRanges();
+		if (selection) {
+			selection = selection.map(c => { return <Slick.Range>{ fromCell: c.fromCell - 1, toCell: c.toCell - 1, toRow: c.toRow, fromRow: c.fromRow }; });
+			return selection;
+		} else {
+			return undefined;
+		}
+	}
+
 	private copySelection(): void {
 		let messageText = this.getMessageText();
 		if (messageText.length > 0) {
-			this._bootstrapService.clipboardService.writeText(messageText);
+			this.clipboardService.writeText(messageText);
 		} else {
 			let activeGrid = this.activeGrid;
-			let selection = this.slickgrids.toArray()[activeGrid].getSelectedRanges();
-			this.dataService.copyResults(selection, this.renderedDataSets[activeGrid].batchId, this.renderedDataSets[activeGrid].resultId);
+			this.dataService.copyResults(this.getSelection(activeGrid), this.renderedDataSets[activeGrid].batchId, this.renderedDataSets[activeGrid].resultId);
 		}
 	}
 
 	private copyWithHeaders(): void {
 		let activeGrid = this.activeGrid;
-		let selection = this.slickgrids.toArray()[activeGrid].getSelectedRanges();
-		this.dataService.copyResults(selection, this.renderedDataSets[activeGrid].batchId,
+		this.dataService.copyResults(this.getSelection(activeGrid), this.renderedDataSets[activeGrid].batchId,
 			this.renderedDataSets[activeGrid].resultId, true);
 	}
 
@@ -250,7 +265,7 @@ export abstract class GridParentComponent {
 			messageText = this.getMessageText();
 		}
 		if (messageText.length > 0) {
-			this._bootstrapService.clipboardService.writeText(messageText);
+			this.clipboardService.writeText(messageText);
 		}
 	}
 
@@ -261,6 +276,25 @@ export abstract class GridParentComponent {
 			}
 		}
 		return '';
+	}
+
+	protected goToNextQueryOutputTab(): void {
+	}
+
+	protected showChartForGrid(index: number) {
+	}
+
+	protected goToNextGrid() {
+		if (this.renderedDataSets.length > 0) {
+			let next = this.activeGrid + 1;
+			if (next >= this.renderedDataSets.length) {
+				next = 0;
+			}
+			this.navigateToGrid(next);
+		}
+	}
+
+	protected navigateToGrid(index: number) {
 	}
 
 	private initShortcutsBase(): void {
@@ -288,6 +322,12 @@ export abstract class GridParentComponent {
 			},
 			'SaveAsExcel': () => {
 				this.sendSaveRequest(SaveFormat.EXCEL);
+			},
+			'SaveAsXML': () => {
+				this.sendSaveRequest(SaveFormat.XML);
+			},
+			'GoToNextQueryOutputTab': () => {
+				this.goToNextQueryOutputTab();
 			}
 		};
 
@@ -300,7 +340,7 @@ export abstract class GridParentComponent {
 	/**
 	 * Send save result set request to service
 	 */
-	handleContextClick(event: { type: string, batchId: number, resultId: number, index: number, selection: ISlickRange[] }): void {
+	handleContextClick(event: { type: string, batchId: number, resultId: number, index: number, selection: Slick.Range[] }): void {
 		switch (event.type) {
 			case 'savecsv':
 				this.dataService.sendSaveRequest({ batchIndex: event.batchId, resultSetNumber: event.resultId, format: SaveFormat.CSV, selection: event.selection });
@@ -310,6 +350,9 @@ export abstract class GridParentComponent {
 				break;
 			case 'saveexcel':
 				this.dataService.sendSaveRequest({ batchIndex: event.batchId, resultSetNumber: event.resultId, format: SaveFormat.EXCEL, selection: event.selection });
+				break;
+			case 'savexml':
+				this.dataService.sendSaveRequest({ batchIndex: event.batchId, resultSetNumber: event.resultId, format: SaveFormat.XML, selection: event.selection });
 				break;
 			case 'selectall':
 				this.activeGrid = event.index;
@@ -330,8 +373,7 @@ export abstract class GridParentComponent {
 		let activeGrid = this.activeGrid;
 		let batchId = this.renderedDataSets[activeGrid].batchId;
 		let resultId = this.renderedDataSets[activeGrid].resultId;
-		let selection = this.slickgrids.toArray()[activeGrid].getSelectedRanges();
-		this.dataService.sendSaveRequest({ batchIndex: batchId, resultSetNumber: resultId, format: format, selection: selection });
+		this.dataService.sendSaveRequest({ batchIndex: batchId, resultSetNumber: resultId, format: format, selection: this.getSelection(activeGrid) });
 	}
 
 	protected _keybindingFor(action: IAction): ResolvedKeybinding {
@@ -343,7 +385,7 @@ export abstract class GridParentComponent {
 		let slick: any = this.slickgrids.toArray()[index];
 		let grid = slick._grid;
 
-		let selection = this.slickgrids.toArray()[index].getSelectedRanges();
+		let selection = this.getSelection(index);
 
 		if (selection && selection.length === 0) {
 			let cell = (grid as Slick.Grid<any>).getCellFromEvent(event);
@@ -381,7 +423,9 @@ export abstract class GridParentComponent {
 		let self = this;
 		return (gridIndex: number) => {
 			self.activeGrid = gridIndex;
-			self.slickgrids.toArray()[this.activeGrid].selection = true;
+			let grid = self.slickgrids.toArray()[self.activeGrid];
+			grid.setActive();
+			grid.selection = true;
 		};
 	}
 
@@ -389,22 +433,6 @@ export abstract class GridParentComponent {
 		if (this.activeGrid >= 0 && this.slickgrids.length > this.activeGrid) {
 			this.slickgrids.toArray()[this.activeGrid].selection = true;
 		}
-	}
-
-	/**
-	 * Used to convert the string to a enum compatible with SlickGrid
-	 */
-	protected stringToFieldType(input: string): FieldType {
-		let fieldtype: FieldType;
-		switch (input) {
-			case 'string':
-				fieldtype = FieldType.String;
-				break;
-			default:
-				fieldtype = FieldType.String;
-				break;
-		}
-		return fieldtype;
 	}
 
 	/**
@@ -472,7 +500,13 @@ export abstract class GridParentComponent {
 	 */
 	xmlLinkHandler = (cellRef: string, row: number, dataContext: JSON, colDef: any) => {
 		const self = this;
-		self.handleLink(cellRef, row, dataContext, colDef, 'xml');
+
+		let value = self.getCellValueString(dataContext, colDef);
+		if (value.startsWith('<ShowPlanXML') && colDef.name !== 'XML Showplan') {
+			self.handleQueryPlanLink(cellRef, value);
+		} else {
+			self.handleLink(cellRef, row, dataContext, colDef, 'xml');
+		}
 	}
 
 	/**
@@ -481,6 +515,13 @@ export abstract class GridParentComponent {
 	jsonLinkHandler = (cellRef: string, row: number, dataContext: JSON, colDef: any) => {
 		const self = this;
 		self.handleLink(cellRef, row, dataContext, colDef, 'json');
+	}
+
+	private handleQueryPlanLink(cellRef: string, value: string): void {
+		const self = this;
+		$(cellRef).children('.xmlLink').click(function (): void {
+			self.queryEditorService.newQueryPlanEditor(value);
+		});
 	}
 
 	private handleLink(cellRef: string, row: number, dataContext: JSON, colDef: any, linkType: string): void {
@@ -514,9 +555,7 @@ export abstract class GridParentComponent {
 	}
 
 	keyEvent(e: KeyboardEvent): void {
-		let self = this;
-		let handled = self.tryHandleKeyEvent(e);
-		if (handled) {
+		if (this.tryHandleKeyEvent(new StandardKeyboardEvent(e))) {
 			e.preventDefault();
 			e.stopPropagation();
 		}
@@ -529,12 +568,12 @@ export abstract class GridParentComponent {
 	 *
 	 * @protected
 	 * @abstract
-	 * @param {any} e
+	 * @param {StandardKeyboardEvent} e
 	 * @returns {boolean}
 	 *
 	 * @memberOf GridParentComponent
 	 */
-	protected abstract tryHandleKeyEvent(e): boolean;
+	protected abstract tryHandleKeyEvent(e: StandardKeyboardEvent): boolean;
 
 	resizeGrids(): void {
 		const self = this;

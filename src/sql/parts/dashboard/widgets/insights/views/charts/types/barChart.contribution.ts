@@ -12,11 +12,11 @@ import { chartInsightSchema } from 'sql/parts/dashboard/widgets/insights/views/c
 
 import BarChart from './barChart.component';
 
-export const properties: IJSONSchema = {
+const properties: IJSONSchema = {
 	properties: {
 		yAxisMin: {
 			type: 'number',
-			description: nls.localize('yAxisMin', "Minumum value of the y axis")
+			description: nls.localize('yAxisMin', "Minimum value of the y axis")
 		},
 		yAxisMax: {
 			type: 'number',
@@ -24,11 +24,11 @@ export const properties: IJSONSchema = {
 		},
 		yAxisLabel: {
 			type: 'string',
-			description: nls.localize('yAxisLabel', "Label for the y axis")
+			description: nls.localize('barchart.yAxisLabel', "Label for the y axis")
 		},
 		xAxisMin: {
 			type: 'number',
-			description: nls.localize('xAxisMin', "Minumum value of the x axis")
+			description: nls.localize('xAxisMin', "Minimum value of the x axis")
 		},
 		xAxisMax: {
 			type: 'number',
@@ -36,11 +36,11 @@ export const properties: IJSONSchema = {
 		},
 		xAxisLabel: {
 			type: 'string',
-			description: nls.localize('xAxisLabel', "Label for the x axis")
+			description: nls.localize('barchart.xAxisLabel', "Label for the x axis")
 		}
 	}
 };
 
-const barSchema = mixin(clone(chartInsightSchema), properties) as IJSONSchema;
+export const barChartSchema = mixin(clone(chartInsightSchema), properties) as IJSONSchema;
 
-registerInsight('bar', '', barSchema, BarChart);
+registerInsight('bar', '', barChartSchema, BarChart);

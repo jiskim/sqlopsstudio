@@ -4,22 +4,23 @@
  *--------------------------------------------------------------------------------------------*/
 
 import 'vs/css!sql/parts/query/editor/media/queryEditor';
+import * as DOM from 'vs/base/browser/dom';
 import { TPromise } from 'vs/base/common/winjs.base';
-import { Dimension, Builder } from 'vs/base/browser/builder';
 import { EditorOptions } from 'vs/workbench/common/editor';
 import { BaseEditor } from 'vs/workbench/browser/parts/editor/baseEditor';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
-import { CreateLoginInput } from './createLoginInput';
-import { CreateLoginModule } from './createLogin.module';
-import { IConnectionManagementService } from 'sql/parts/connection/common/connectionManagement';
-import { IMetadataService } from 'sql/services/metadata/metadataService';
-import { IScriptingService } from 'sql/services/scripting/scriptingService';
-import { IQueryEditorService } from 'sql/parts/query/common/queryEditorService';
-import { IBootstrapService } from 'sql/services/bootstrap/bootstrapService';
-import { DashboardComponentParams } from 'sql/services/bootstrap/bootstrapParams';
+import { CreateLoginInput } from 'sql/parts/admin/security/createLoginInput';
+import { CreateLoginModule } from 'sql/parts/admin/security/createLogin.module';
+import { IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
+import { IMetadataService } from 'sql/platform/metadata/common/metadataService';
+import { IScriptingService } from 'sql/platform/scripting/common/scriptingService';
+import { IQueryEditorService } from 'sql/workbench/services/queryEditor/common/queryEditorService';
+import { bootstrapAngular, IBootstrapParams } from 'sql/services/bootstrap/bootstrapService';
 import { CREATELOGIN_SELECTOR } from 'sql/parts/admin/security/createLogin.component';
+import { CancellationToken } from 'vs/base/common/cancellation';
+import { IStorageService } from 'vs/platform/storage/common/storage';
 
 export class CreateLoginEditor extends BaseEditor {
 
@@ -33,15 +34,15 @@ export class CreateLoginEditor extends BaseEditor {
 		@IMetadataService private _metadataService: IMetadataService,
 		@IScriptingService private _scriptingService: IScriptingService,
 		@IQueryEditorService private _queryEditorService: IQueryEditorService,
-		@IBootstrapService private _bootstrapService: IBootstrapService
+		@IStorageService storageService: IStorageService
 	) {
-		super(CreateLoginEditor.ID, telemetryService, themeService);
+		super(CreateLoginEditor.ID, telemetryService, themeService, storageService);
 	}
 
 	/**
-	 * Called to create the editor in the parent builder.
+	 * Called to create the editor in the parent element.
 	 */
-	public createEditor(parent: Builder): void {
+	public createEditor(parent: HTMLElement): void {
 	}
 
 	/**
@@ -54,10 +55,10 @@ export class CreateLoginEditor extends BaseEditor {
 	 * Updates the internal variable keeping track of the editor's size, and re-calculates the sash position.
 	 * To be called when the container of this editor changes size.
 	 */
-	public layout(dimension: Dimension): void {
+	public layout(dimension: DOM.Dimension): void {
 	}
 
-	public setInput(input: CreateLoginInput, options: EditorOptions): TPromise<void> {
+	public setInput(input: CreateLoginInput, options: EditorOptions): Thenable<void> {
 		if (this.input instanceof CreateLoginInput && this.input.matches(input)) {
 			return TPromise.as(undefined);
 		}
@@ -65,9 +66,9 @@ export class CreateLoginEditor extends BaseEditor {
 		if (!input.hasInitialized) {
 			this.bootstrapAngular(input);
 		}
-		this.revealElementWithTagName(input.uniqueSelector, this.getContainer().getHTMLElement());
+		this.revealElementWithTagName(input.uniqueSelector, this.getContainer());
 
-		return super.setInput(input, options);
+		return super.setInput(input, options, CancellationToken.None);
 	}
 
 	/**
@@ -96,13 +97,13 @@ export class CreateLoginEditor extends BaseEditor {
 	private bootstrapAngular(input: CreateLoginInput): void {
 
 		// Get the bootstrap params and perform the bootstrap
-		let params: DashboardComponentParams = {
+		let params: IBootstrapParams = {
 			connection: input.getConnectionProfile(),
 			ownerUri: input.getUri()
 		};
-		let uniqueSelector = this._bootstrapService.bootstrap(
+		let uniqueSelector = bootstrapAngular(this.instantiationService,
 			CreateLoginModule,
-			this.getContainer().getHTMLElement(),
+			this.getContainer(),
 			CREATELOGIN_SELECTOR,
 			params);
 		input.setUniqueSelector(uniqueSelector);

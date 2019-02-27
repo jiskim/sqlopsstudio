@@ -6,25 +6,22 @@
 'use strict';
 
 import { InstantiationService } from 'vs/platform/instantiation/common/instantiationService';
-import { IMessageService } from 'vs/platform/message/common/message';
-import { TestMessageService, TestEditorGroupService } from 'vs/workbench/test/workbenchTestServices';
-import { EditorInput } from 'vs/workbench/common/editor';
 import { IEditorDescriptor } from 'vs/workbench/browser/editor';
 import { TPromise } from 'vs/base/common/winjs.base';
-import URI from 'vs/base/common/uri';
+import { URI } from 'vs/base/common/uri';
 import * as DOM from 'vs/base/browser/dom';
 import { Memento } from 'vs/workbench/common/memento';
-import { Builder } from 'vs/base/browser/builder';
+import { Builder } from 'sql/base/browser/builder';
 import { UntitledEditorInput } from 'vs/workbench/common/editor/untitledEditorInput';
 
 import { QueryResultsInput } from 'sql/parts/query/common/queryResultsInput';
 import { QueryEditor } from 'sql/parts/query/editor/queryEditor';
-import { QueryModelService } from 'sql/parts/query/execution/queryModelService';
+import { QueryModelService } from 'sql/platform/query/common/queryModelService';
 import { QueryInput } from 'sql/parts/query/common/queryInput';
-import { INewConnectionParams, ConnectionType, RunQueryOnConnectionMode } from 'sql/parts/connection/common/connectionManagement';
-import { ConnectionManagementService } from 'sql/parts/connection/common/connectionManagementService';
+import { INewConnectionParams, ConnectionType, RunQueryOnConnectionMode } from 'sql/platform/connection/common/connectionManagement';
+import { ConnectionManagementService } from 'sql/platform/connection/common/connectionManagementService';
 import { RunQueryAction, ListDatabasesActionItem } from 'sql/parts/query/execution/queryActions';
-import { EditorDescriptorService } from 'sql/parts/query/editor/editorDescriptorService';
+import { EditorDescriptorService } from 'sql/workbench/services/queryEditor/common/editorDescriptorService';
 
 import { TestThemeService } from 'sqltest/stubs/themeTestService';
 
@@ -32,14 +29,19 @@ import * as TypeMoq from 'typemoq';
 import * as assert from 'assert';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { BaseEditor } from 'vs/workbench/browser/parts/editor/baseEditor';
+import { INotificationService } from 'vs/platform/notification/common/notification';
+import { TestNotificationService } from 'vs/platform/notification/test/common/testNotificationService';
+import { ConfigurationService } from 'vs/platform/configuration/node/configurationService';
+import { TestStorageService } from 'vs/workbench/test/workbenchTestServices';
 
 suite('SQL QueryEditor Tests', () => {
 	let queryModelService: QueryModelService;
 	let instantiationService: TypeMoq.Mock<InstantiationService>;
 	let themeService: TestThemeService = new TestThemeService();
-	let messageService: TypeMoq.Mock<IMessageService>;
+	let notificationService: TypeMoq.Mock<INotificationService>;
 	let editorDescriptorService: TypeMoq.Mock<EditorDescriptorService>;
 	let connectionManagementService: TypeMoq.Mock<ConnectionManagementService>;
+	let configurationService: TypeMoq.Mock<ConfigurationService>;
 	let memento: TypeMoq.Mock<Memento>;
 
 	let queryInput: QueryInput;
@@ -58,7 +60,8 @@ suite('SQL QueryEditor Tests', () => {
 			editorDescriptorService.object,
 			undefined,
 			undefined,
-			undefined);
+			configurationService.object,
+			new TestStorageService());
 	};
 
 	setup(() => {
@@ -92,7 +95,7 @@ suite('SQL QueryEditor Tests', () => {
 		instantiationService.setup(x => x.createInstance(TypeMoq.It.isAny(), TypeMoq.It.isAny(), TypeMoq.It.isAny())).returns((classDef, editor, action) => {
 			if (classDef.ID) {
 				if (classDef.ID === 'listDatabaseQueryActionItem') {
-					return new ListDatabasesActionItem(editor, action, connectionManagementService.object, undefined, undefined, undefined);
+					return new ListDatabasesActionItem(editor, action, connectionManagementService.object, undefined, undefined, undefined, configurationService.object);
 				}
 			}
 			// Default
@@ -109,22 +112,30 @@ suite('SQL QueryEditor Tests', () => {
 		editorDescriptorService = TypeMoq.Mock.ofType(EditorDescriptorService, TypeMoq.MockBehavior.Loose);
 		editorDescriptorService.setup(x => x.getEditor(TypeMoq.It.isAny())).returns(() => descriptor);
 
+		configurationService = TypeMoq.Mock.ofInstance({
+			getValue: () => undefined,
+			onDidChangeConfiguration: () => undefined
+		} as any);
+		configurationService.setup(x => x.getValue(TypeMoq.It.isAny())).returns(() => {
+			return { enablePreviewFeatures: true };
+		});
+
 		// Create a QueryInput
-		let filePath = 'someFile.sql';
+		let filePath = 'file://someFile.sql';
 		let uri: URI = URI.parse(filePath);
-		let fileInput = new UntitledEditorInput(uri, false, '', '', '', instantiationService.object, undefined, undefined, undefined, undefined);
-		let queryResultsInput: QueryResultsInput = new QueryResultsInput(uri.fsPath);
-		queryInput = new QueryInput('first', 'first', fileInput, queryResultsInput, undefined, undefined, undefined, undefined);
+		let fileInput = new UntitledEditorInput(uri, false, '', '', '', instantiationService.object, undefined, undefined, undefined);
+		let queryResultsInput: QueryResultsInput = new QueryResultsInput(uri.fsPath, configurationService.object);
+		queryInput = new QueryInput('first', fileInput, queryResultsInput, undefined, undefined, undefined, undefined, undefined);
 
 		// Create a QueryInput to compare to the previous one
-		let filePath2 = 'someFile2.sql';
+		let filePath2 = 'file://someFile2.sql';
 		let uri2: URI = URI.parse(filePath2);
-		let fileInput2 = new UntitledEditorInput(uri2, false, '', '', '', instantiationService.object, undefined, undefined, undefined, undefined);
-		let queryResultsInput2: QueryResultsInput = new QueryResultsInput(uri2.fsPath);
-		queryInput2 = new QueryInput('second', 'second', fileInput2, queryResultsInput2, undefined, undefined, undefined, undefined);
+		let fileInput2 = new UntitledEditorInput(uri2, false, '', '', '', instantiationService.object, undefined, undefined, undefined);
+		let queryResultsInput2: QueryResultsInput = new QueryResultsInput(uri2.fsPath, configurationService.object);
+		queryInput2 = new QueryInput('second', fileInput2, queryResultsInput2, undefined, undefined, undefined, undefined, undefined);
 
 		// Mock IMessageService
-		messageService = TypeMoq.Mock.ofType(TestMessageService, TypeMoq.MockBehavior.Loose);
+		notificationService = TypeMoq.Mock.ofType(TestNotificationService, TypeMoq.MockBehavior.Loose);
 
 		// Mock ConnectionManagementService
 		memento = TypeMoq.Mock.ofType(Memento, TypeMoq.MockBehavior.Loose, '');
@@ -132,15 +143,17 @@ suite('SQL QueryEditor Tests', () => {
 		connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, memento.object, undefined);
 		connectionManagementService.callBase = true;
 		connectionManagementService.setup(x => x.isConnected(TypeMoq.It.isAny())).returns(() => false);
+		connectionManagementService.setup(x => x.disconnectEditor(TypeMoq.It.isAny())).returns(() => void 0);
+		connectionManagementService.setup(x => x.ensureDefaultLanguageFlavor(TypeMoq.It.isAnyString())).returns(() => void 0);
 
 		// Create a QueryModelService
-		queryModelService = new QueryModelService(instantiationService.object, messageService.object);
+		queryModelService = new QueryModelService(instantiationService.object, notificationService.object);
 	});
 
 	test('createEditor creates only the taskbar', (done) => {
 		// If I call createEditor
 		let editor: QueryEditor = getQueryEditor();
-		editor.createEditor(parentBuilder);
+		editor.createEditor(parentBuilder.getHTMLElement());
 
 		// The taskbar should be created
 		assert.equal(!!editor.taskbar, true);
@@ -319,6 +332,9 @@ suite('SQL QueryEditor Tests', () => {
 			queryConnectionService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, memento.object, undefined);
 			queryConnectionService.callBase = true;
 
+			queryConnectionService.setup(x => x.disconnectEditor(TypeMoq.It.isAny(), TypeMoq.It.isAny())).returns(() => void 0);
+			queryConnectionService.setup(x => x.ensureDefaultLanguageFlavor(TypeMoq.It.isAnyString())).returns(() => void 0);
+
 			// Mock InstantiationService to give us the actions
 			queryActionInstantiationService = TypeMoq.Mock.ofType(InstantiationService, TypeMoq.MockBehavior.Loose);
 
@@ -335,24 +351,25 @@ suite('SQL QueryEditor Tests', () => {
 			queryActionInstantiationService.setup(x => x.createInstance(TypeMoq.It.isAny(), TypeMoq.It.isAny(), TypeMoq.It.isAny()))
 				.returns((definition, editor, action, selectBox) => {
 					if (definition.ID === 'listDatabaseQueryActionItem') {
-						let item = new ListDatabasesActionItem(editor, action, queryConnectionService.object, undefined, undefined, undefined);
+						let item = new ListDatabasesActionItem(editor, action, queryConnectionService.object, undefined, undefined, undefined, configurationService.object);
 						return item;
 					}
 					// Default
 					return new RunQueryAction(undefined, undefined, undefined);
 				});
 
-			let fileInput = new UntitledEditorInput(URI.parse('testUri'), false, '', '', '', instantiationService.object, undefined, undefined, undefined, undefined);
+			let fileInput = new UntitledEditorInput(URI.parse('file://testUri'), false, '', '', '', instantiationService.object, undefined, undefined, undefined);
 			queryModelService = TypeMoq.Mock.ofType(QueryModelService, TypeMoq.MockBehavior.Loose, undefined, undefined);
 			queryModelService.callBase = true;
+			queryModelService.setup(x => x.disposeQuery(TypeMoq.It.isAny())).returns(() => void 0);
 			queryInput = new QueryInput(
-				'testUri',
 				'',
 				fileInput,
 				undefined,
 				undefined,
-				undefined,
+				connectionManagementService.object,
 				queryModelService.object,
+				undefined,
 				undefined
 			);
 		});
@@ -384,9 +401,9 @@ suite('SQL QueryEditor Tests', () => {
 			done();
 		});
 		test('Test that we attempt to dispose query when the queryInput is disposed', (done) => {
-			let queryResultsInput = new QueryResultsInput('testUri');
+			let queryResultsInput = new QueryResultsInput('testUri', configurationService.object);
 			queryInput['_results'] = queryResultsInput;
-			queryInput.dispose();
+			queryInput.close();
 			queryModelService.verify(x => x.disposeQuery(TypeMoq.It.isAnyString()), TypeMoq.Times.once());
 			done();
 		});

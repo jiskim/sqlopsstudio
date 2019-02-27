@@ -6,9 +6,9 @@
 'use strict';
 
 import * as sqlops from 'sqlops';
-import Event from 'vs/base/common/event';
-import { IAccountManagementService } from 'sql/services/accountManagement/interfaces';
-import { AccountProviderAddedEventParams, UpdateAccountListEventParams } from 'sql/services/accountManagement/eventTypes';
+import { Event } from 'vs/base/common/event';
+import { IAccountManagementService } from 'sql/platform/accountManagement/common/interfaces';
+import { AccountProviderAddedEventParams, UpdateAccountListEventParams } from 'sql/platform/accountManagement/common/eventTypes';
 import { TPromise } from 'vs/base/common/winjs.base';
 
 export class AccountManagementTestService implements IAccountManagementService {
@@ -50,7 +50,7 @@ export class AccountManagementTestService implements IAccountManagementService {
 		return undefined;
 	}
 
-	getSecurityToken(account: sqlops.Account): Thenable<{}> {
+	getSecurityToken(account: sqlops.Account, resource: sqlops.AzureResource): Thenable<{}> {
 		return undefined;
 	}
 
@@ -88,7 +88,7 @@ export class AccountProviderStub implements sqlops.AccountProvider {
 		return Promise.resolve();
 	}
 
-	getSecurityToken(account: sqlops.Account): Thenable<{}> {
+	getSecurityToken(account: sqlops.Account, resource: sqlops.AzureResource): Thenable<{}> {
 		return Promise.resolve({});
 	}
 

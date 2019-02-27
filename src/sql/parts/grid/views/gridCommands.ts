@@ -6,16 +6,16 @@
 'use strict';
 
 import * as GridContentEvents from 'sql/parts/grid/common/gridContentEvents';
-import { IQueryModelService } from 'sql/parts/query/execution/queryModel';
+import { IQueryModelService } from 'sql/platform/query/common/queryModel';
 import { QueryEditor } from 'sql/parts/query/editor/queryEditor';
 import { EditDataEditor } from 'sql/parts/editData/editor/editDataEditor';
 
 import { ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
-import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 
-function runActionOnActiveResultsEditor	(accessor: ServicesAccessor, eventName: string): void {
-	let editorService = accessor.get(IWorkbenchEditorService);
-	const candidates = [editorService.getActiveEditor(), ...editorService.getVisibleEditors()].filter(e => {
+function runActionOnActiveResultsEditor(accessor: ServicesAccessor, eventName: string): void {
+	let editorService = accessor.get(IEditorService);
+	const candidates = [editorService.activeControl, ...editorService.visibleControls].filter(e => {
 		if (e) {
 			let id = e.getId();
 			if (id === QueryEditor.ID || id === EditDataEditor.ID) {
@@ -28,7 +28,7 @@ function runActionOnActiveResultsEditor	(accessor: ServicesAccessor, eventName: 
 
 	if (candidates.length > 0) {
 		let queryModelService: IQueryModelService = accessor.get(IQueryModelService);
-		let uri = (<any> candidates[0].input).uri;
+		let uri = (<any>candidates[0].input).uri;
 		queryModelService.sendGridContentEvent(uri, eventName);
 	}
 }
@@ -53,6 +53,10 @@ export const toggleResultsPane = (accessor: ServicesAccessor) => {
 	runActionOnActiveResultsEditor(accessor, GridContentEvents.ToggleResultPane);
 };
 
+export const goToNextQueryOutputTab = (accessor: ServicesAccessor) => {
+	runActionOnActiveResultsEditor(accessor, GridContentEvents.GoToNextQueryOutputTab);
+};
+
 export const saveAsCsv = (accessor: ServicesAccessor) => {
 	runActionOnActiveResultsEditor(accessor, GridContentEvents.SaveAsCsv);
 };
@@ -65,6 +69,10 @@ export const saveAsExcel = (accessor: ServicesAccessor) => {
 	runActionOnActiveResultsEditor(accessor, GridContentEvents.SaveAsExcel);
 };
 
+export const saveAsXml = (accessor: ServicesAccessor) => {
+	runActionOnActiveResultsEditor(accessor, GridContentEvents.SaveAsXML);
+};
+
 export const selectAll = (accessor: ServicesAccessor) => {
 	runActionOnActiveResultsEditor(accessor, GridContentEvents.SelectAll);
 };
@@ -73,4 +81,11 @@ export const selectAllMessages = (accessor: ServicesAccessor) => {
 	runActionOnActiveResultsEditor(accessor, GridContentEvents.SelectAllMessages);
 };
 
+export const viewAsChart = (accessor: ServicesAccessor) => {
+	runActionOnActiveResultsEditor(accessor, GridContentEvents.ViewAsChart);
+};
+
+export const goToNextGrid = (accessor: ServicesAccessor) => {
+	runActionOnActiveResultsEditor(accessor, GridContentEvents.GoToNextGrid);
+};
 

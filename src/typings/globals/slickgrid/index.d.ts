@@ -650,6 +650,11 @@ declare namespace Slick {
 		showHeaderRow?: boolean;
 
 		/**
+		 *
+		 */
+		showRowNumber?: boolean;
+
+		/**
 		* If true, the column being resized will change its width as the mouse is dragging the resize handle. If false, the column will resize after mouse drag ends.
 		**/
 		syncColumnCellResize?: boolean;
@@ -759,6 +764,16 @@ declare namespace Slick {
 		**/
 		destroy(): void;
 
+		/**
+		 * Sets selected ranges for the grid
+		 */
+		setSelectedRanges(ranges: Slick.Range[]);
+
+		/**
+		 * Gets selected ranges for the grid
+		 */
+		getSelectedRanges(): Slick.Range[];
+
 		onSelectedRangesChanged: Slick.Event<E>;
 	}
 
@@ -815,7 +830,7 @@ declare namespace Slick {
 		* @param newData New databinding source using a regular JavaScript array..
 		* @param scrollToTop If true, the grid will reset the vertical scroll position to the top of the grid.
 		**/
-		public setData(newData: T[], scrollToTop: boolean): void;
+		public setData(newData: T[], scrollToTop?: boolean): void;
 
 		/**
 		* Sets a new source for databinding and removes all rendered rows. Note that this doesn't render the new rows - you can follow it with a call to render() to do that.
@@ -1144,7 +1159,7 @@ declare namespace Slick {
 		* @param row A row index.
 		* @param cell A column index.
 		**/
-		public setActiveCell(row: number, cell: number): void;
+		public setActiveCell(row: number, cell: number, opt_editMode?: boolean, preClickModeOn?: boolean, suppressActiveCellChangedEvent?: boolean): void;
 
 		/**
 		* Sets CSS classes to specific grid cells by calling removeCellCssStyles(key) followed by addCellCssStyles(key, hash). key is name for this set of styles so you can reference it later - to modify it or remove it, for example. hash is a per-row-index, per-column-name nested hash of CSS classes to apply.
@@ -1193,6 +1208,7 @@ declare namespace Slick {
 		public onSelectedRowsChanged: Slick.Event<OnSelectedRowsChangedEventArgs<T>>;
 		public onCellCssStylesChanged: Slick.Event<OnCellCssStylesChangedEventArgs<T>>;
 		public onViewportChanged: Slick.Event<OnViewportChangedEventArgs<T>>;
+		public onRendered: Slick.Event<OnRenderedEventArgs<T>>;
 		// #endregion Events
 
 		// #region Plugins
@@ -1207,7 +1223,7 @@ declare namespace Slick {
 		public render(): void;
 		public invalidate(): void;
 		public invalidateRow(row: number): void;
-		public invalidateRows(rows: number[]): void;
+		public invalidateRows(rows: number[], keepEditor: boolean): void;
 		public invalidateAllRows(): void;
 		public updateCell(row: number, cell: number): void;
 		public updateRow(row: number): void;
@@ -1218,6 +1234,7 @@ declare namespace Slick {
 		public scrollRowIntoView(row: number, doPaging: boolean): void;
 		public scrollRowToTop(row: number): void;
 		public scrollCellIntoView(row: number, cell: number, doPaging: boolean): void;
+		public scrollTo(y: number);
 		public getCanvasNode(): HTMLCanvasElement;
 		public focus(): void;
 
@@ -1247,16 +1264,21 @@ declare namespace Slick {
 	export interface OnDragEndEventArgs<T extends SlickData> extends GridEventArgs<T> {
 		// todo: need to understand $canvas drag event parameter's 'dd' object
 		// the documentation is not enlightening
+		range: { start: Slick.Cell, end: Slick.Cell };
 	}
 
 	export interface OnDragEventArgs<T extends SlickData> extends GridEventArgs<T> {
 		// todo: need to understand $canvas drag event parameter's 'dd' object
 		// the documentation is not enlightening
+		range: { start: Slick.Cell, end: Slick.Cell };
 	}
 
 	export interface OnDragStartEventArgs<T extends SlickData> extends GridEventArgs<T> {
 		// todo: need to understand $canvas drag event parameter's 'dd' object
 		// the documentation is not enlightening
+		startX: number;
+		startY: number;
+		range: { start: Slick.Cell, end: Slick.Cell };
 	}
 
 	export interface OnDragInitEventArgs<T extends SlickData> extends GridEventArgs<T> {
@@ -1393,6 +1415,11 @@ declare namespace Slick {
 
 	export interface OnViewportChangedEventArgs<T extends SlickData> extends GridEventArgs<T> {
 
+	}
+
+	export interface OnRenderedEventArgs<T extends SlickData> extends GridEventArgs<T>{
+		startRow: number;
+		endRow: number;
 	}
 
 	export interface SortColumn<T extends SlickData> {

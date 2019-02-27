@@ -4,12 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
-import uri from 'vs/base/common/uri';
+import { getPathFromAmdModule } from 'vs/base/common/amd';
 
 export interface IProductConfiguration {
 	nameShort: string;
 	nameLong: string;
 	applicationName: string;
+	win32AppId: string;
+	win32x64AppId: string;
+	win32UserAppId: string;
+	win32x64UserAppId: string;
 	win32AppUserModelId: string;
 	win32MutexName: string;
 	darwinBundleIdentifier: string;
@@ -18,18 +22,23 @@ export interface IProductConfiguration {
 	downloadUrl: string;
 	updateUrl?: string;
 	quality?: string;
+	target?: string;
 	commit?: string;
 	settingsSearchBuildId?: number;
 	settingsSearchUrl?: string;
+	experimentsUrl?: string;
 	date: string;
 	extensionsGallery: {
 		serviceUrl: string;
 		itemUrl: string;
 		controlUrl: string;
+		recommendationsUrl: string;
 	};
 	extensionTips: { [id: string]: string; };
+	// {{SQL CARBON EDIT}}
+	recommendedExtensions: string[];
 	extensionImportantTips: { [id: string]: { name: string; pattern: string; }; };
-	exeBasedExtensionTips: { [id: string]: any; };
+	exeBasedExtensionTips: { [id: string]: { friendlyName: string, windowsPath?: string, recommendations: string[] }; };
 	extensionKeywords: { [extension: string]: string[]; };
 	extensionAllowedBadgeProviders: string[];
 	extensionAllowedProposedApi: string[];
@@ -49,6 +58,10 @@ export interface IProductConfiguration {
 	};
 	documentationUrl: string;
 	releaseNotesUrl: string;
+	// {SQL CARBON EDIT}
+	gettingStartedUrl: string;
+	// {SQL CARBON EDIT}
+	vscodeVersion: string;
 	keyboardShortcutsUrlMac: string;
 	keyboardShortcutsUrlLinux: string;
 	keyboardShortcutsUrlWin: string;
@@ -59,6 +72,7 @@ export interface IProductConfiguration {
 	reportIssueUrl: string;
 	licenseUrl: string;
 	privacyStatementUrl: string;
+	telemetryOptOutUrl: string;
 	npsSurveyUrl: string;
 	surveys: ISurveyData[];
 	checksums: { [path: string]: string; };
@@ -70,6 +84,8 @@ export interface IProductConfiguration {
 		'linux-x64': string;
 		'darwin': string;
 	};
+	logUploaderUrl: string;
+	portable?: string;
 }
 
 export interface ISurveyData {
@@ -80,7 +96,7 @@ export interface ISurveyData {
 	userProbability: number;
 }
 
-const rootPath = path.dirname(uri.parse(require.toUrl('')).fsPath);
+const rootPath = path.dirname(getPathFromAmdModule(require, ''));
 const productJsonPath = path.join(rootPath, 'product.json');
 const product = require.__$__nodeRequire(productJsonPath) as IProductConfiguration;
 

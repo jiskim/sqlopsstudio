@@ -5,105 +5,117 @@
 
 'use strict';
 import * as sqlops from 'sqlops';
-import { ConnectionManagementInfo } from 'sql/parts/connection/common/connectionManagementInfo';
-import { ICapabilitiesService } from 'sql/services/capabilities/capabilitiesService';
-import Event from 'vs/base/common/event';
-import { Action } from 'vs/base/common/actions';
-import { ConnectionOptionSpecialType } from 'sql/workbench/api/common/sqlExtHostTypes';
+import { ConnectionManagementInfo } from 'sql/platform/connection/common/connectionManagementInfo';
+import { ICapabilitiesService, ProviderFeatures } from 'sql/platform/capabilities/common/capabilitiesService';
+import { ConnectionOptionSpecialType, ServiceOptionType } from 'sql/workbench/api/common/sqlExtHostTypes';
 
+import { Event, Emitter } from 'vs/base/common/event';
+import { Action } from 'vs/base/common/actions';
 
 export class CapabilitiesTestService implements ICapabilitiesService {
 
 	public _serviceBrand: any;
 
-	private _providers: sqlops.CapabilitiesProvider[] = [];
-
-	private _capabilities: sqlops.DataProtocolServerCapabilities[] = [];
-
+	public capabilities: { [id: string]: ProviderFeatures } = {};
 
 	constructor() {
 
-		let connectionProvider: sqlops.ConnectionProviderOptions = {
-			options: [
-				{
-					name: 'serverName',
-					displayName: undefined,
-					description: undefined,
-					groupName: undefined,
-					categoryValues: undefined,
-					defaultValue: undefined,
-					isIdentity: true,
-					isRequired: true,
-					specialValueType: ConnectionOptionSpecialType.serverName,
-					valueType: 0
-				},
-				{
-					name: 'databaseName',
-					displayName: undefined,
-					description: undefined,
-					groupName: undefined,
-					categoryValues: undefined,
-					defaultValue: undefined,
-					isIdentity: true,
-					isRequired: true,
-					specialValueType: ConnectionOptionSpecialType.databaseName,
-					valueType: 0
-				},
-				{
-					name: 'userName',
-					displayName: undefined,
-					description: undefined,
-					groupName: undefined,
-					categoryValues: undefined,
-					defaultValue: undefined,
-					isIdentity: true,
-					isRequired: true,
-					specialValueType: ConnectionOptionSpecialType.userName,
-					valueType: 0
-				},
-				{
-					name: 'authenticationType',
-					displayName: undefined,
-					description: undefined,
-					groupName: undefined,
-					categoryValues: undefined,
-					defaultValue: undefined,
-					isIdentity: true,
-					isRequired: true,
-					specialValueType: ConnectionOptionSpecialType.authType,
-					valueType: 0
-				},
-				{
-					name: 'password',
-					displayName: undefined,
-					description: undefined,
-					groupName: undefined,
-					categoryValues: undefined,
-					defaultValue: undefined,
-					isIdentity: true,
-					isRequired: true,
-					specialValueType: ConnectionOptionSpecialType.password,
-					valueType: 0
-				}
-			]
-		};
+		let connectionProvider: sqlops.ConnectionOption[] = [
+			{
+				name: 'connectionName',
+				displayName: undefined,
+				description: undefined,
+				groupName: undefined,
+				categoryValues: undefined,
+				defaultValue: undefined,
+				isIdentity: true,
+				isRequired: true,
+				specialValueType: ConnectionOptionSpecialType.connectionName,
+				valueType: ServiceOptionType.string
+			},
+			{
+				name: 'serverName',
+				displayName: undefined,
+				description: undefined,
+				groupName: undefined,
+				categoryValues: undefined,
+				defaultValue: undefined,
+				isIdentity: true,
+				isRequired: true,
+				specialValueType: ConnectionOptionSpecialType.serverName,
+				valueType: ServiceOptionType.string
+			},
+			{
+				name: 'databaseName',
+				displayName: undefined,
+				description: undefined,
+				groupName: undefined,
+				categoryValues: undefined,
+				defaultValue: undefined,
+				isIdentity: true,
+				isRequired: true,
+				specialValueType: ConnectionOptionSpecialType.databaseName,
+				valueType: ServiceOptionType.string
+			},
+			{
+				name: 'userName',
+				displayName: undefined,
+				description: undefined,
+				groupName: undefined,
+				categoryValues: undefined,
+				defaultValue: undefined,
+				isIdentity: true,
+				isRequired: true,
+				specialValueType: ConnectionOptionSpecialType.userName,
+				valueType: ServiceOptionType.string
+			},
+			{
+				name: 'authenticationType',
+				displayName: undefined,
+				description: undefined,
+				groupName: undefined,
+				categoryValues: undefined,
+				defaultValue: undefined,
+				isIdentity: true,
+				isRequired: true,
+				specialValueType: ConnectionOptionSpecialType.authType,
+				valueType: ServiceOptionType.string
+			},
+			{
+				name: 'password',
+				displayName: undefined,
+				description: undefined,
+				groupName: undefined,
+				categoryValues: undefined,
+				defaultValue: undefined,
+				isIdentity: true,
+				isRequired: true,
+				specialValueType: ConnectionOptionSpecialType.password,
+				valueType: ServiceOptionType.string
+			}
+		];
 		let msSQLCapabilities = {
-			protocolVersion: '1',
-			providerName: 'MSSQL',
-			providerDisplayName: 'MSSQL',
-			connectionProvider: connectionProvider,
-			adminServicesProvider: undefined,
-			features: undefined
+			providerId: 'MSSQL',
+			displayName: 'MSSQL',
+			connectionOptions: connectionProvider,
 		};
-		this._capabilities.push(msSQLCapabilities);
+		this.capabilities['MSSQL'] = { connection: msSQLCapabilities };
 
 	}
 
 	/**
 	 * Retrieve a list of registered server capabilities
 	 */
-	public getCapabilities(): sqlops.DataProtocolServerCapabilities[] {
-		return this._capabilities;
+	public getCapabilities(provider: string): ProviderFeatures {
+		return this.capabilities[provider];
+	}
+
+	public getLegacyCapabilities(provider: string): sqlops.DataProtocolServerCapabilities {
+		throw new Error('Method not implemented.');
+	}
+
+	public get providers(): { [id: string]: ProviderFeatures } {
+		return this.capabilities;
 	}
 
 	/**
@@ -125,5 +137,8 @@ export class CapabilitiesTestService implements ICapabilitiesService {
 	public onCapabilitiesReady(): Promise<void> {
 		return Promise.resolve(null);
 	}
+
+	private _onCapabilitiesRegistered = new Emitter<ProviderFeatures>();
+	public readonly onCapabilitiesRegistered = this._onCapabilitiesRegistered.event;
 }
 

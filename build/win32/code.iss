@@ -8,18 +8,17 @@ AppId={#AppId}
 AppName={#NameLong}
 AppVerName={#NameVersion}
 AppPublisher=Microsoft Corporation
-AppPublisherURL=https://github.com/Microsoft/sqlopsstudio
-AppSupportURL=https://github.com/Microsoft/sqlopsstudio
-AppUpdatesURL=https://github.com/Microsoft/sqlopsstudio
+AppPublisherURL=https://github.com/Microsoft/azuredatastudio
+AppSupportURL=https://github.com/Microsoft/azuredatastudio
+AppUpdatesURL=https://github.com/Microsoft/azuredatastudio
 
-DefaultDirName={pf}\{#DirName}
 DefaultGroupName={#NameLong}
 AllowNoIcons=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=SqlOpsStudioSetup
+OutputBaseFilename=AzureDataStudioSetup
 Compression=lzma
 SolidCompression=yes
-AppMutex={#AppMutex}
+AppMutex={code:GetAppMutex}
 SetupMutex={#AppMutex}setup
 WizardImageFile={#RepoDir}\resources\win32\inno-big.bmp
 WizardSmallImageFile={#RepoDir}\resources\win32\inno-small.bmp
@@ -35,8 +34,19 @@ ShowLanguageDialog=auto
 ArchitecturesAllowed={#ArchitecturesAllowed}
 ArchitecturesInstallIn64BitMode={#ArchitecturesInstallIn64BitMode}
 
+#ifdef Sign
+SignTool=esrp
+#endif
+
+#if "user" == InstallTarget
+DefaultDirName={userpf}\{#DirName}
+PrivilegesRequired=lowest
+#else
+DefaultDirName={pf}\{#DirName}
+#endif
+
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl,{#RepoDir}\build\win32\i18n\messages.en.isl" {#LocalizedLanguageFile}
+Name: "english"; MessagesFile: "{#RepoDir}\build\win32\i18n\Default.isl,{#RepoDir}\build\win32\i18n\messages.en.isl" {#LocalizedLanguageFile}
 Name: "german"; MessagesFile: "compiler:Languages\German.isl,{#RepoDir}\build\win32\i18n\messages.de.isl" {#LocalizedLanguageFile("deu")}
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl,{#RepoDir}\build\win32\i18n\messages.es.isl" {#LocalizedLanguageFile("esp")}
 Name: "french"; MessagesFile: "compiler:Languages\French.isl,{#RepoDir}\build\win32\i18n\messages.fr.isl" {#LocalizedLanguageFile("fra")}
@@ -52,19 +62,27 @@ Type: filesandordirs; Name: "{app}\resources\app\out"; Check: IsNotUpdate
 Type: filesandordirs; Name: "{app}\resources\app\plugins"; Check: IsNotUpdate
 Type: filesandordirs; Name: "{app}\resources\app\extensions"; Check: IsNotUpdate
 Type: filesandordirs; Name: "{app}\resources\app\node_modules"; Check: IsNotUpdate
+Type: filesandordirs; Name: "{app}\resources\app\node_modules.asar.unpacked"; Check: IsNotUpdate
+Type: files; Name: "{app}\resources\app\node_modules.asar"; Check: IsNotUpdate
 Type: files; Name: "{app}\resources\app\Credits_45.0.2454.85.html"; Check: IsNotUpdate
 
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\_"
+
 [Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce; Check: IsNotUpdate
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 0,6.1
+Name: "associatewithfiles"; Description: "{cm:AssociateWithFiles,{#NameLong}}"; GroupDescription: "{cm:Other}"; Flags: unchecked
 Name: "addtopath"; Description: "{cm:AddToPath}"; GroupDescription: "{cm:Other}"
 Name: "runcode"; Description: "{cm:RunAfter,{#NameShort}}"; GroupDescription: "{cm:Other}"; Check: WizardSilent
 
 [Files]
-Source: "*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "*"; Excludes: "\CodeSignSummary*.md,\tools,\tools\*,\resources\app\product.json"; DestDir: "{code:GetDestDir}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ProductJsonPath}"; DestDir: "{code:GetDestDir}\resources\app"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; AppUserModelID: "{#AppUserId}"
-Name: "{commondesktop}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; AppUserModelID: "{#AppUserId}"
+Name: "{commondesktop}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; Tasks: desktopicon; AppUserModelID: "{#AppUserId}"
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; Tasks: quicklaunchicon; AppUserModelID: "{#AppUserId}"
 
 [Run]
@@ -72,10 +90,36 @@ Filename: "{app}\{#ExeBasename}.exe"; Description: "{cm:LaunchProgram,{#NameLong
 Filename: "{app}\{#ExeBasename}.exe"; Description: "{cm:LaunchProgram,{#NameLong}}"; Flags: nowait postinstall; Check: WizardNotSilent
 
 [Registry]
-Root: HKCR; Subkey: "{#RegValueName}SourceFile"; ValueType: string; ValueName: ""; ValueData: "{cm:SourceFile,{#NameLong}}"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "{#RegValueName}SourceFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\resources\app\resources\win32\code_file.ico"
-Root: HKCR; Subkey: "{#RegValueName}SourceFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeBasename}.exe"" ""%1"""
+#if "user" == InstallTarget
+#define SoftwareClassesRootKey "HKCU"
+#else
+#define SoftwareClassesRootKey "HKLM"
+#endif
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\{#RegValueName}SourceFile"; ValueType: string; ValueName: ""; ValueData: "{cm:SourceFile,{#NameLong}}"; Flags: uninsdeletekey
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\{#RegValueName}SourceFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\resources\app\resources\win32\code_file.ico"
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\{#RegValueName}SourceFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeBasename}.exe"" ""%1"""
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}\bin"; Tasks: addtopath; Check: NeedsAddPath(ExpandConstant('{app}\bin'))
+
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\.sql\OpenWithProgids"; ValueType: none; ValueName: "{#RegValueName}"; Flags: deletevalue uninsdeletevalue; Tasks: associatewithfiles
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\.sql\OpenWithProgids"; ValueType: string; ValueName: "{#RegValueName}.sql"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associatewithfiles
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\{#RegValueName}.sql"; ValueType: string; ValueName: ""; ValueData: "{cm:SourceFile,SQL}"; Flags: uninsdeletekey; Tasks: associatewithfiles
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\{#RegValueName}.sql"; ValueType: string; ValueName: "AppUserModelID"; ValueData: "{#AppUserId}"; Flags: uninsdeletekey; Tasks: associatewithfiles
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\{#RegValueName}.sql\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\resources\app\resources\win32\sql.ico"; Tasks: associatewithfiles
+Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\{#RegValueName}.sql\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeBasename}.exe"" ""%1"""; Tasks: associatewithfiles
+; Environment
+#if "user" == InstallTarget
+#define EnvironmentRootKey "HKCU"
+#define EnvironmentKey "Environment"
+#define Uninstall64RootKey "HKCU64"
+#define Uninstall32RootKey "HKCU32"
+#else
+#define EnvironmentRootKey "HKLM"
+#define EnvironmentKey "System\CurrentControlSet\Control\Session Manager\Environment"
+#define Uninstall64RootKey "HKLM64"
+#define Uninstall32RootKey "HKLM32"
+#endif
+
+Root: {#EnvironmentRootKey}; Subkey: "{#EnvironmentKey}"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}\bin"; Tasks: addtopath; Check: NeedsAddPath(ExpandConstant('{app}\bin'))
 
 [Code]
 // Don't allow installing conflicting architectures
@@ -87,15 +131,41 @@ var
 begin
   Result := True;
 
-  if IsWin64 then begin
-    RegKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + copy('{#IncompatibleAppId}', 2, 38) + '_is1';
+  #if "user" == InstallTarget
+    if not WizardSilent() and IsAdminLoggedOn() then begin
+      if MsgBox('This User Installer is not meant to be run as an Administrator. If you would like to install VS Code for all users in this system, download the System Installer instead from https://code.visualstudio.com. Are you sure you want to continue?', mbError, MB_OKCANCEL) = IDCANCEL then begin
+        Result := False;
+      end;
+    end;
+  #endif
+
+  #if "user" == InstallTarget
+    #if "ia32" == Arch
+      #define IncompatibleArchRootKey "HKLM32"
+    #else
+      #define IncompatibleArchRootKey "HKLM64"
+    #endif
+
+    if Result and not WizardSilent() then begin
+      RegKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + copy('{#IncompatibleTargetAppId}', 2, 38) + '_is1';
+
+      if RegKeyExists({#IncompatibleArchRootKey}, RegKey) then begin
+        if MsgBox('{#NameShort} is already installed on this system for all users. We recommend first uninstalling that version before installing this one. Are you sure you want to continue the installation?', mbConfirmation, MB_YESNO) = IDNO then begin
+          Result := False;
+        end;
+      end;
+    end;
+  #endif
+
+  if Result and IsWin64 then begin
+    RegKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' + copy('{#IncompatibleArchAppId}', 2, 38) + '_is1';
 
     if '{#Arch}' = 'ia32' then begin
-      Result := not RegKeyExists(HKLM64, RegKey);
+      Result := not RegKeyExists({#Uninstall64RootKey}, RegKey);
       ThisArch := '32';
       AltArch := '64';
     end else begin
-      Result := not RegKeyExists(HKLM32, RegKey);
+      Result := not RegKeyExists({#Uninstall32RootKey}, RegKey);
       ThisArch := '64';
       AltArch := '32';
     end;
@@ -122,9 +192,9 @@ begin
   Result := not IsBackgroundUpdate();
 end;
 
-// SqlOps will create a flag file before the update starts (/update=C:\foo\bar)
-// - if the file exists at this point, the user quit SqlOps before the update finished, so don't start SqlOps after update
-// - otherwise, the user has accepted to apply the update and SqlOps should start
+// AzureDataStudio will create a flag file before the update starts (/update=C:\foo\bar)
+// - if the file exists at this point, the user quit AzureDataStudio before the update finished, so don't start AzureDataStudio after update
+// - otherwise, the user has accepted to apply the update and AzureDataStudio should start
 function LockFileExists(): Boolean;
 begin
   Result := FileExists(ExpandConstant('{param:update}'))
@@ -136,6 +206,48 @@ begin
     Result := not LockFileExists()
   else
     Result := True;
+end;
+
+function GetAppMutex(Value: string): string;
+begin
+  if IsBackgroundUpdate() then
+    Result := ''
+  else
+    Result := '{#AppMutex}';
+end;
+
+function GetDestDir(Value: string): string;
+begin
+  if IsBackgroundUpdate() then
+    Result := ExpandConstant('{app}\_')
+  else
+    Result := ExpandConstant('{app}');
+end;
+
+function BoolToStr(Value: Boolean): String;
+begin
+  if Value then
+    Result := 'true'
+  else
+    Result := 'false';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  UpdateResultCode: Integer;
+begin
+  if IsBackgroundUpdate() and (CurStep = ssPostInstall) then
+  begin
+    CreateMutex('{#AppMutex}-ready');
+
+    while (CheckForMutexes('{#AppMutex}')) do
+    begin
+      Log('Application is still running, waiting');
+      Sleep(1000);
+    end;
+
+    Exec(ExpandConstant('{app}\tools\inno_updater.exe'), ExpandConstant('"{app}\{#ExeBasename}.exe" ' + BoolToStr(LockFileExists())), '', SW_SHOW, ewWaitUntilTerminated, UpdateResultCode);
+  end;
 end;
 
 // http://stackoverflow.com/a/23838239/261019
@@ -162,7 +274,7 @@ function NeedsAddPath(Param: string): boolean;
 var
   OrigPath: string;
 begin
-  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', OrigPath)
+  if not RegQueryStringValue({#EnvironmentRootKey}, '{#EnvironmentKey}', 'Path', OrigPath)
   then begin
     Result := True;
     exit;
@@ -181,7 +293,7 @@ begin
   if not CurUninstallStep = usUninstall then begin
     exit;
   end;
-  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Path)
+  if not RegQueryStringValue({#EnvironmentRootKey}, '{#EnvironmentKey}', 'Path', Path)
   then begin
     exit;
   end;
@@ -197,5 +309,9 @@ begin
       end;
     end;
   end;
-  RegWriteExpandStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', NewPath);
+  RegWriteExpandStringValue({#EnvironmentRootKey}, '{#EnvironmentKey}', 'Path', NewPath);
 end;
+
+#ifdef Debug
+  #expr SaveToFile(AddBackslash(SourcePath) + "code-processed.iss")
+#endif

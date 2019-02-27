@@ -3,16 +3,17 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import 'vs/css!sql/parts/query/editor/media/queryActions';
 import * as nls from 'vs/nls';
-import { Builder, $ } from 'vs/base/browser/builder';
+import { Builder, $ } from 'sql/base/browser/builder';
 import { Dropdown } from 'sql/base/browser/ui/editableDropdown/dropdown';
 import { Action, IActionItem, IActionRunner } from 'vs/base/common/actions';
 import { EventEmitter } from 'sql/base/common/eventEmitter';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
 import { TPromise } from 'vs/base/common/winjs.base';
 import { IContextViewService } from 'vs/platform/contextview/browser/contextView';
-import { IMessageService, Severity } from 'vs/platform/message/common/message';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
+import { attachEditableDropdownStyler, attachSelectBoxStyler } from 'sql/platform/theme/common/styler';
 
 import { ISelectionData } from 'sqlops';
 import {
@@ -21,9 +22,13 @@ import {
 	INewConnectionParams,
 	ConnectionType,
 	RunQueryOnConnectionMode
-} from 'sql/parts/connection/common/connectionManagement';
+} from 'sql/platform/connection/common/connectionManagement';
 import { QueryEditor } from 'sql/parts/query/editor/queryEditor';
-import { IQueryModelService } from 'sql/parts/query/execution/queryModel';
+import { IQueryModelService } from 'sql/platform/query/common/queryModel';
+import { INotificationService } from 'vs/platform/notification/common/notification';
+import Severity from 'vs/base/common/severity';
+import { SelectBox } from 'sql/base/browser/ui/selectBox/selectBox';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 
 /**
  * Action class that query-based Actions will extend. This base class automatically handles activating and
@@ -266,7 +271,11 @@ export class ActualQueryPlanAction extends QueryTaskbarAction {
 		}
 
 		if (this.isConnected(editor)) {
-			editor.currentQueryInput.runQuery(editor.getSelection(), {
+			let selection = editor.getSelection();
+			if (!selection) {
+				selection = editor.getAllSelection();
+			}
+			editor.currentQueryInput.runQuery(selection, {
 				displayActualQueryPlan: true
 			});
 		}
@@ -430,28 +439,44 @@ export class ListDatabasesActionItem extends EventEmitter implements IActionItem
 	private _isConnected: boolean;
 	private $databaseListDropdown: Builder;
 	private _dropdown: Dropdown;
+	private _databaseSelectBox: SelectBox;
+	private _isInAccessibilityMode: boolean;
+	private readonly _selectDatabaseString: string = nls.localize("selectDatabase", "Select Database");
 
 	// CONSTRUCTOR /////////////////////////////////////////////////////////
 	constructor(
 		private _editor: QueryEditor,
 		private _action: ListDatabasesAction,
 		@IConnectionManagementService private _connectionManagementService: IConnectionManagementService,
-		@IMessageService private _messageService: IMessageService,
+		@INotificationService private _notificationService: INotificationService,
 		@IContextViewService contextViewProvider: IContextViewService,
-		@IThemeService themeService: IThemeService
+		@IThemeService themeService: IThemeService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService
 	) {
 		super();
 		this._toDispose = [];
 		this.$databaseListDropdown = $('.databaseListDropdown');
-		this._dropdown = new Dropdown(this.$databaseListDropdown.getHTMLElement(), contextViewProvider, themeService, {
-			strictSelection: true,
-			placeholder: nls.localize("selectDatabase", "Select Database")
-		});
-		this._dropdown.onValueChange(s => this.databaseSelected(s));
+		this._isInAccessibilityMode = this._configurationService.getValue('editor.accessibilitySupport') === 'on';
+
+		if (this._isInAccessibilityMode) {
+			this._databaseSelectBox = new SelectBox([this._selectDatabaseString], this._selectDatabaseString, contextViewProvider, undefined, { ariaLabel: this._selectDatabaseString });
+			this._databaseSelectBox.render(this.$databaseListDropdown.getHTMLElement());
+			this._databaseSelectBox.onDidSelect(e => { this.databaseSelected(e.selected); });
+			this._databaseSelectBox.disable();
+
+		} else {
+			this._dropdown = new Dropdown(this.$databaseListDropdown.getHTMLElement(), contextViewProvider, themeService, {
+				strictSelection: true,
+				placeholder: this._selectDatabaseString,
+				ariaLabel: this._selectDatabaseString,
+				actionLabel: nls.localize('listDatabases.toggleDatabaseNameDropdown', 'Select Database Toggle Dropdown')
+			});
+			this._dropdown.onValueChange(s => this.databaseSelected(s));
+			this._toDispose.push(this._dropdown.onFocus(() => { self.onDropdownFocus(); }));
+		}
 
 		// Register event handlers
 		let self = this;
-		this._toDispose.push(this._dropdown.onFocus(() => { self.onDropdownFocus(); }));
 		this._toDispose.push(this._connectionManagementService.onConnectionChanged(params => { self.onConnectionChanged(params); }));
 	}
 
@@ -461,7 +486,12 @@ export class ListDatabasesActionItem extends EventEmitter implements IActionItem
 	}
 
 	public style(styles) {
-		this._dropdown.style(styles);
+		if (this._isInAccessibilityMode) {
+			this._databaseSelectBox.style(styles);
+		}
+		else {
+			this._dropdown.style(styles);
+		}
 	}
 
 	public setActionContext(context: any): void {
@@ -473,11 +503,27 @@ export class ListDatabasesActionItem extends EventEmitter implements IActionItem
 	}
 
 	public focus(): void {
-		this._dropdown.focus();
+		if (this._isInAccessibilityMode) {
+			this._databaseSelectBox.focus();
+		} else {
+			this._dropdown.focus();
+		}
 	}
 
 	public blur(): void {
-		this._dropdown.blur();
+		if (this._isInAccessibilityMode) {
+			this._databaseSelectBox.blur();
+		} else {
+			this._dropdown.blur();
+		}
+	}
+
+	public attachStyler(themeService: IThemeService): IDisposable {
+		if (this._isInAccessibilityMode) {
+			return attachSelectBoxStyler(this, themeService);
+		} else {
+			return attachEditableDropdownStyler(this, themeService);
+		}
 	}
 
 	public dispose(): void {
@@ -492,9 +538,15 @@ export class ListDatabasesActionItem extends EventEmitter implements IActionItem
 
 	public onDisconnect(): void {
 		this._isConnected = false;
-		this._dropdown.enabled = false;
 		this._currentDatabaseName = undefined;
-		this._dropdown.value = '';
+
+		if (this._isInAccessibilityMode) {
+			this._databaseSelectBox.disable();
+			this._databaseSelectBox.setOptions([this._selectDatabaseString]);
+		} else {
+			this._dropdown.enabled = false;
+			this._dropdown.value = '';
+		}
 	}
 
 	// PRIVATE HELPERS /////////////////////////////////////////////////////
@@ -511,17 +563,22 @@ export class ListDatabasesActionItem extends EventEmitter implements IActionItem
 
 		this._connectionManagementService.changeDatabase(this._editor.uri, dbName)
 			.then(
-			result => {
-				if (!result) {
+				result => {
+					if (!result) {
+						this.resetDatabaseName();
+						this._notificationService.notify({
+							severity: Severity.Error,
+							message: nls.localize('changeDatabase.failed', "Failed to change database")
+						});
+					}
+				},
+				error => {
 					this.resetDatabaseName();
-					this._messageService.show(Severity.Error, nls.localize('changeDatabase.failed', "Failed to change database"));
-				}
-			},
-			error => {
-				this.resetDatabaseName();
-				this._messageService.show(Severity.Error, nls.localize('changeDatabase.failedWithError', "Failed to change database {0}", error));
-			}
-			);
+					this._notificationService.notify({
+						severity: Severity.Error,
+						message: nls.localize('changeDatabase.failedWithError', "Failed to change database {0}", error)
+					});
+				});
 	}
 
 	private getCurrentDatabaseName() {
@@ -536,7 +593,11 @@ export class ListDatabasesActionItem extends EventEmitter implements IActionItem
 	}
 
 	private resetDatabaseName() {
-		this._dropdown.value = this.getCurrentDatabaseName();
+		if (this._isInAccessibilityMode) {
+			this._databaseSelectBox.selectWithOptionName(this.getCurrentDatabaseName());
+		} else {
+			this._dropdown.value = this.getCurrentDatabaseName();
+		}
 	}
 
 	private onConnectionChanged(connParams: IConnectionParams): void {
@@ -570,9 +631,26 @@ export class ListDatabasesActionItem extends EventEmitter implements IActionItem
 
 	private updateConnection(databaseName: string) {
 		this._isConnected = true;
-		this._dropdown.enabled = true;
 		this._currentDatabaseName = databaseName;
-		this._dropdown.value = databaseName;
+
+		if (this._isInAccessibilityMode) {
+			this._databaseSelectBox.enable();
+			let self = this;
+			let uri = self._editor.connectedUri;
+			if (!uri) {
+				return;
+			}
+			self._connectionManagementService.listDatabases(uri)
+				.then(result => {
+					if (result && result.databaseNames) {
+						this._databaseSelectBox.setOptions(result.databaseNames);
+					}
+					this._databaseSelectBox.selectWithOptionName(databaseName);
+				});
+		} else {
+			this._dropdown.enabled = true;
+			this._dropdown.value = databaseName;
+		}
 	}
 
 	// TESTING PROPERTIES //////////////////////////////////////////////////

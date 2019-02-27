@@ -3,15 +3,13 @@
  *  Licensed under the Source EULA. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as assert from 'assert';
-import URI from 'vs/base/common/uri';
-import { IModel } from 'vs/editor/common/editorCommon';
-import { EditorState, CodeEditorStateFlag } from 'vs/editor/browser/core/editorState';
-import { Selection } from 'vs/editor/common/core/selection';
-import { Position } from 'vs/editor/common/core/position';
+import { URI } from 'vs/base/common/uri';
+import { CodeEditorStateFlag, EditorState } from 'vs/editor/browser/core/editorState';
 import { ICodeEditor } from 'vs/editor/browser/editorBrowser';
+import { Position } from 'vs/editor/common/core/position';
+import { Selection } from 'vs/editor/common/core/selection';
+import { ITextModel } from 'vs/editor/common/model';
 
 interface IStubEditorState {
 	model?: { uri?: URI, version?: number };
@@ -93,7 +91,7 @@ suite('Editor Core - Editor State', () => {
 		let mappedModel = model ? { uri: model.uri ? model.uri : URI.parse('http://dummy.org'), getVersionId: () => model.version } : null;
 
 		return {
-			getModel: (): IModel => <any>mappedModel,
+			getModel: (): ITextModel => <any>mappedModel,
 			getPosition: (): Position => position,
 			getSelection: (): Selection => selection,
 			getScrollLeft: (): number => scroll && scroll.left,

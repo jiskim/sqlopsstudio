@@ -5,22 +5,23 @@
 
 'use strict';
 import 'vs/css!./media/autoOAuthDialog';
-import { Builder, $ } from 'vs/base/browser/builder';
+import { Builder, $ } from 'sql/base/browser/builder';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { attachInputBoxStyler } from 'vs/platform/theme/common/styler';
 import { IPartService } from 'vs/workbench/services/part/common/partService';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 import { IContextViewService } from 'vs/platform/contextview/browser/contextView';
 import { localize } from 'vs/nls';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { SIDE_BAR_BACKGROUND } from 'vs/workbench/common/theme';
 
 import { Button } from 'sql/base/browser/ui/button/button';
-import { Modal } from 'sql/base/browser/ui/modal/modal';
+import { Modal } from 'sql/workbench/browser/modal/modal';
 import { InputBox } from 'sql/base/browser/ui/inputBox/inputBox';
-import { attachModalDialogStyler, attachButtonStyler } from 'sql/common/theme/styler';
+import { attachModalDialogStyler, attachButtonStyler } from 'sql/platform/theme/common/styler';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import * as TelemetryKeys from 'sql/common/telemetryKeys';
+import { IClipboardService } from 'vs/platform/clipboard/common/clipboardService';
 
 export class AutoOAuthDialog extends Modal {
 	private _copyAndOpenButton: Button;
@@ -42,16 +43,19 @@ export class AutoOAuthDialog extends Modal {
 
 	constructor(
 		@IPartService partService: IPartService,
-		@IThemeService private _themeService: IThemeService,
+		@IThemeService themeService: IThemeService,
 		@IContextViewService private _contextViewService: IContextViewService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IContextKeyService contextKeyService: IContextKeyService
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IClipboardService clipboardService: IClipboardService
 	) {
 		super(
 			'',
 			TelemetryKeys.AutoOAuth,
 			partService,
 			telemetryService,
+			clipboardService,
+			themeService,
 			contextKeyService,
 			{
 				isFlyout: true,
@@ -68,7 +72,7 @@ export class AutoOAuthDialog extends Modal {
 		this._register(attachButtonStyler(this.backButton, this._themeService, { buttonBackground: SIDE_BAR_BACKGROUND, buttonHoverBackground: SIDE_BAR_BACKGROUND }));
 
 		this._copyAndOpenButton = this.addFooterButton(localize('copyAndOpen', 'Copy & Open'), () => this.addAccount());
-		this._closeButton = this.addFooterButton(localize('cancel', 'Cancel'), () => this.cancel());
+		this._closeButton = this.addFooterButton(localize('oauthDialog.cancel', 'Cancel'), () => this.cancel());
 		this.registerListeners();
 		this._userCodeInputBox.disable();
 		this._websiteInputBox.disable();
@@ -100,11 +104,13 @@ export class AutoOAuthDialog extends Modal {
 		let inputBox: InputBox;
 		container.div({ class: 'dialog-input-section' }, (inputContainer) => {
 			inputContainer.div({ class: 'dialog-label' }, (labelContainer) => {
-				labelContainer.innerHtml(label);
+				labelContainer.text(label);
 			});
 
 			inputContainer.div({ class: 'dialog-input' }, (inputCellContainer) => {
-				inputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService);
+				inputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService, {
+					ariaLabel: label
+				});
 			});
 		});
 		return inputBox;

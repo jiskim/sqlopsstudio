@@ -9,12 +9,12 @@ import Severity from 'vs/base/common/severity';
 import { localize } from 'vs/nls';
 import * as sqlops from 'sqlops';
 
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
-import { IErrorMessageService } from 'sql/parts/connection/common/connectionManagement';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { FirewallRuleDialog } from 'sql/parts/accountManagement/firewallRuleDialog/firewallRuleDialog';
-import { IAccountManagementService } from 'sql/services/accountManagement/interfaces';
-import { IResourceProviderService } from 'sql/parts/accountManagement/common/interfaces';
+import { IAccountManagementService, AzureResource } from 'sql/platform/accountManagement/common/interfaces';
+import { IResourceProviderService } from 'sql/workbench/services/resourceProvider/common/resourceProviderService';
 import { Deferred } from 'sql/base/common/promise';
+import { IErrorMessageService } from 'sql/platform/errorMessage/common/errorMessageService';
 
 export class FirewallRuleDialogController {
 
@@ -22,7 +22,7 @@ export class FirewallRuleDialogController {
 	private _connection: IConnectionProfile;
 	private _resourceProviderId: string;
 
-	private _addAccountErrorTitle = localize('addAccountErrorTitle', 'Error adding account');
+	private _addAccountErrorTitle = localize('firewallDialog.addAccountErrorTitle', 'Error adding account');
 	private _firewallRuleErrorTitle = localize('firewallRuleError', 'Firewall rule error');
 	private _deferredPromise: Deferred<boolean>;
 
@@ -61,7 +61,7 @@ export class FirewallRuleDialogController {
 	private handleOnCreateFirewallRule(): void {
 		let resourceProviderId = this._resourceProviderId;
 
-		this._accountManagementService.getSecurityToken(this._firewallRuleDialog.viewModel.selectedAccount).then(tokenMappings => {
+		this._accountManagementService.getSecurityToken(this._firewallRuleDialog.viewModel.selectedAccount, AzureResource.ResourceManagement).then(tokenMappings => {
 			let firewallRuleInfo: sqlops.FirewallRuleInfo = {
 				startIpAddress: this._firewallRuleDialog.viewModel.isIPAddressSelected ? this._firewallRuleDialog.viewModel.defaultIPAddress : this._firewallRuleDialog.viewModel.fromSubnetIPRange,
 				endIpAddress: this._firewallRuleDialog.viewModel.isIPAddressSelected ? this._firewallRuleDialog.viewModel.defaultIPAddress : this._firewallRuleDialog.viewModel.toSubnetIPRange,

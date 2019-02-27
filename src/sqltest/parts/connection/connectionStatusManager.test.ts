@@ -7,16 +7,17 @@
 
 import * as assert from 'assert';
 import * as sqlops from 'sqlops';
-import { ConnectionStatusManager } from 'sql/parts/connection/common/connectionStatusManager';
-import * as Utils from 'sql/parts/connection/common/utils';
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
+import { ConnectionStatusManager } from 'sql/platform/connection/common/connectionStatusManager';
+import * as Utils from 'sql/platform/connection/common/utils';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 import { CapabilitiesTestService } from 'sqltest/stubs/capabilitiesTestService';
-import { ConnectionProfile } from 'sql/parts/connection/common/connectionProfile';
+import { ConnectionProfile } from 'sql/platform/connection/common/connectionProfile';
 
 let connections: ConnectionStatusManager;
 let capabilitiesService: CapabilitiesTestService;
 let connectionProfileObject: ConnectionProfile;
 let connectionProfile: IConnectionProfile = {
+	connectionName: 'new name',
 	serverName: 'new server',
 	databaseName: 'database',
 	userName: 'user',
@@ -33,6 +34,7 @@ let connectionProfile: IConnectionProfile = {
 	id: undefined
 };
 let editorConnectionProfile: IConnectionProfile = {
+	connectionName: 'new name',
 	serverName: 'new server',
 	databaseName: 'database',
 	userName: 'user',
@@ -49,6 +51,7 @@ let editorConnectionProfile: IConnectionProfile = {
 	id: undefined
 };
 let connectionProfileWithoutDbName: IConnectionProfile = {
+	connectionName: 'new name',
 	serverName: 'new server',
 	databaseName: '',
 	userName: 'user',
@@ -72,8 +75,7 @@ let connection3Id: string;
 suite('SQL ConnectionStatusManager tests', () => {
 	setup(() => {
 		capabilitiesService = new CapabilitiesTestService();
-		connectionProfileObject = new ConnectionProfile(capabilitiesService.getCapabilities().find(x => x.providerName === 'MSSQL')
-			, connectionProfile);
+		connectionProfileObject = new ConnectionProfile(capabilitiesService, connectionProfile);
 		connections = new ConnectionStatusManager(capabilitiesService);
 		connection1Id = Utils.generateUri(connectionProfile);
 		connection2Id = 'connection2Id';
@@ -94,7 +96,7 @@ suite('SQL ConnectionStatusManager tests', () => {
 		let id: string = connection1Id;
 		let expected = connectionProfileObject;
 		let actual = connections.findConnection(id);
-		assert.deepEqual(actual.connectionProfile, expected);
+		assert.equal(connectionProfileObject.matches(actual.connectionProfile), true);
 	});
 
 	test('getConnectionProfile should return undefined given invalid id', () => {
@@ -108,7 +110,7 @@ suite('SQL ConnectionStatusManager tests', () => {
 		let id: string = connection1Id;
 		let expected = connectionProfileObject;
 		let actual = connections.getConnectionProfile(id);
-		assert.deepEqual(actual, expected);
+		assert.equal(connectionProfileObject.matches(actual), true);
 	});
 
 	test('hasConnection should return false given invalid id', () => {

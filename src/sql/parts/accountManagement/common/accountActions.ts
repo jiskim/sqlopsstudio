@@ -6,15 +6,16 @@
 'use strict';
 
 import * as sqlops from 'sqlops';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 import { localize } from 'vs/nls';
 import { TPromise } from 'vs/base/common/winjs.base';
 import { Action } from 'vs/base/common/actions';
-import { IMessageService, IConfirmation, Severity } from 'vs/platform/message/common/message';
 
 import { error } from 'sql/base/common/log';
-import { IAccountManagementService } from 'sql/services/accountManagement/interfaces';
-import { IErrorMessageService } from 'sql/parts/connection/common/connectionManagement';
+import { IAccountManagementService } from 'sql/platform/accountManagement/common/interfaces';
+import { IDialogService, IConfirmation } from 'vs/platform/dialogs/common/dialogs';
+import { INotificationService } from 'vs/platform/notification/common/notification';
+import Severity from 'vs/base/common/severity';
 
 /**
  * Actions to add a new account
@@ -79,8 +80,8 @@ export class RemoveAccountAction extends Action {
 
 	constructor(
 		private _account: sqlops.Account,
-		@IMessageService private _messageService: IMessageService,
-		@IErrorMessageService private _errorMessageService: IErrorMessageService,
+		@IDialogService private _dialogService: IDialogService,
+		@INotificationService private _notificationService: INotificationService,
 		@IAccountManagementService private _accountManagementService: IAccountManagementService
 	) {
 		super(RemoveAccountAction.ID, RemoveAccountAction.LABEL, 'remove-account-action icon remove');
@@ -92,28 +93,31 @@ export class RemoveAccountAction extends Action {
 		// Ask for Confirm
 		let confirm: IConfirmation = {
 			message: localize('confirmRemoveUserAccountMessage', "Are you sure you want to remove '{0}'?", this._account.displayInfo.displayName),
-			primaryButton: localize('yes', 'Yes'),
-			secondaryButton: localize('no', 'No'),
+			primaryButton: localize('accountActions.yes', 'Yes'),
+			secondaryButton: localize('accountActions.no', 'No'),
 			type: 'question'
 		};
 
-		let confirmPromise: boolean = this._messageService.confirm(confirm);
-		if (!confirmPromise) {
-			return TPromise.as(false);
-		} else {
-			return new TPromise((resolve, reject) => {
-				self._accountManagementService.removeAccount(self._account.key)
-					.then(
+		return this._dialogService.confirm(confirm).then(result => {
+			if (!result) {
+				return TPromise.as(false);
+			} else {
+				return new TPromise((resolve, reject) => {
+					self._accountManagementService.removeAccount(self._account.key)
+						.then(
 						(result) => { resolve(result); },
 						(err) => {
 							// Must handle here as this is an independent action
-							self._errorMessageService.showDialog(Severity.Error,
-								localize('removeAccountFailed', 'Failed to remove account'), err);
+							self._notificationService.notify({
+								severity: Severity.Error,
+								message: localize('removeAccountFailed', 'Failed to remove account')
+							});
 							resolve(false);
 						}
-					);
-			});
-		}
+						);
+				});
+			}
+		});
 	}
 }
 

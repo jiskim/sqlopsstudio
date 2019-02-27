@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "publisher": "Microsoft",
   "aiKey": "AIF-5574968e-856d-40d2-af67-c89a14e76412",
-  "engines": {
-    "vscode": "0.10.x"
-  },
   "activationEvents": [
     "*"
   ],
-  "main": "./client/out/main",
+  "engines": {
+    "vscode": "*"
+  },
+  "main": "./out/main",
   "extensionDependencies": [
     "vscode.sql"
   ],
@@ -17,6 +17,22 @@
     "compile": "gulp compile-extension:mssql-client",
     "update-grammar": "node ../../build/npm/update-grammar.js Microsoft/vscode-mssql syntaxes/SQL.plist ./syntaxes/sql.tmLanguage.json"
   },
+  "dependencies": {
+    "bytes": "^3.1.0",
+    "clipboardy": "^1.2.3",
+    "dataprotocol-client": "github:Microsoft/sqlops-dataprotocolclient#0.2.15",
+    "error-ex": "^1.3.2",
+    "figures": "^2.0.0",
+    "opener": "^1.4.3",
+    "request-promise": "^4.2.2",
+    "service-downloader": "github:anthonydresser/service-downloader#0.1.5",
+    "stream-meter": "^1.0.4",
+    "uri-js": "^4.2.2",
+    "vscode-extension-telemetry": "^0.0.15",
+    "vscode-nls": "^4.0.0",
+    "webhdfs": "^1.1.1"
+  },
+  "devDependencies": {},
   "contributes": {
     "languages": [
       {
@@ -27,6 +43,80 @@
         "aliases": [
           "SQL"
         ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "mssqlCluster.uploadFiles",
+        "title": "%mssqlCluster.uploadFiles%"
+      },
+      {
+        "command": "mssqlCluster.mkdir",
+        "title": "%mssqlCluster.mkdir%"
+      },
+      {
+        "command": "mssqlCluster.deleteFiles",
+        "title": "%mssqlCluster.deleteFiles%"
+      },
+      {
+        "command": "mssqlCluster.previewFile",
+        "title": "%mssqlCluster.previewFile%"
+      },
+      {
+        "command": "mssqlCluster.saveFile",
+        "title": "%mssqlCluster.saveFile%"
+      },
+      {
+        "command": "mssqlCluster.copyPath",
+        "title": "%mssqlCluster.copyPath%"
+      },
+      {
+        "command": "mssqlCluster.task.newNotebook",
+        "title": "%notebook.command.new%",
+        "icon": {
+          "dark": "resources/dark/new_notebook_inverse.svg",
+          "light": "resources/light/new_notebook.svg"
+        }
+      },
+      {
+        "command": "mssqlCluster.task.openNotebook",
+        "title": "%notebook.command.open%",
+        "icon": {
+          "dark": "resources/dark/open_notebook_inverse.svg",
+          "light": "resources/light/open_notebook.svg"
+        }
+      },
+      {
+        "command": "mssqlCluster.livy.cmd.submitSparkJob",
+        "title": "%title.submitSparkJob%"
+      },
+      {
+        "command": "mssqlCluster.livy.task.submitSparkJob",
+        "title": "%title.newSparkJob%",
+        "icon": {
+          "dark": "resources/dark/new_spark_job_inverse.svg",
+          "light": "resources/light/new_spark_job.svg"
+        }
+      },
+      {
+        "command": "mssqlCluster.livy.task.openSparkHistory",
+        "title": "%title.openSparkHistory%",
+        "icon": {
+          "dark": "resources/dark/new_spark_job_inverse.svg",
+          "light": "resources/light/new_spark_job.svg"
+        }
+      },
+      {
+        "command": "mssqlCluster.livy.task.openYarnHistory",
+        "title": "%title.openYarnHistory%",
+        "icon": {
+          "dark": "resources/light/hadoop.svg",
+          "light": "resources/light/hadoop.svg"
+        }
+      },
+      {
+        "command": "mssqlCluster.livy.cmd.submitFileToSparkJob",
+        "title": "%title.submitSparkJob%"
       }
     ],
     "outputChannels": [
@@ -85,7 +175,31 @@
         "mssql.logDebugInfo": {
           "type": "boolean",
           "default": false,
-          "description": "[Optional] Log debug output to the VS Code console (Help -> Toggle Developer Tools)"
+          "description": "[Optional] Log debug output to the console (View -> Output) and then select appropriate output channel from the dropdown"
+        },
+        "mssql.tracingLevel": {
+          "type": "string",
+          "description": "[Optional] Log level for backend services. Azure Data Studio generates a file name every time it starts and if the file already exists the logs entries are appended to that file. For cleanup of old log files see logRetentionMinutes and logFilesRemovalLimit settings. The default tracingLevel does not log much. Changing verbosity could lead to extensive logging and disk space requirements for the logs. Error includes Critical, Warning includes Error, Information includes Warning and Verbose includes Information",
+          "default": "Critical",
+          "enum": [
+            "All",
+            "Off",
+            "Critical",
+            "Error",
+            "Warning",
+            "Information",
+            "Verbose"
+          ]
+        },
+        "mssql.logRetentionMinutes": {
+          "type": "number",
+          "default": 10080,
+          "description": "Number of minutes to retain log files for backend services. Default is 1 week."
+        },
+        "mssql.logFilesRemovalLimit": {
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of old files to remove upon startup that have expired mssql.logRetentionMinutes. Files that do not get cleaned up due to this limitation get cleaned up next time Azure Data Studio starts up."
         },
         "ignorePlatformWarning": {
           "type": "boolean",
@@ -93,6 +207,92 @@
           "default": false
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "mssqlCluster.uploadFiles",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.mkdir",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.deleteFiles",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.previewFile",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.saveFile",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.task.newNotebook",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.task.openNotebook",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.livy.cmd.submitFileToSparkJob",
+          "when": "false"
+        },
+        {
+          "command": "mssqlCluster.livy.task.submitSparkJob",
+          "when": "false"
+        }
+      ],
+      "objectExplorer/item/context": [
+        {
+          "command": "mssqlCluster.uploadFiles",
+          "when": "nodeType=~/^mssqlCluster/ && nodeType != mssqlCluster:message && nodeType != mssqlCluster:file",
+          "group": "1mssqlCluster@1"
+        },
+        {
+          "command": "mssqlCluster.mkdir",
+          "when": "nodeType=~/^mssqlCluster/ && nodeType != mssqlCluster:message && nodeType != mssqlCluster:file",
+          "group": "1mssqlCluster@1"
+        },
+        {
+          "command": "mssqlCluster.saveFile",
+          "when": "nodeType == mssqlCluster:file",
+          "group": "1mssqlCluster@1"
+        },
+        {
+          "command": "mssqlCluster.previewFile",
+          "when": "nodeType == mssqlCluster:file",
+          "group": "1mssqlCluster@2"
+        },
+        {
+          "command": "mssqlCluster.copyPath",
+          "when": "nodeType=~/^mssqlCluster/ && nodeType != mssqlCluster:connection && nodeType != mssqlCluster:message",
+          "group": "1mssqlCluster@3"
+        },
+        {
+          "command": "mssqlCluster.deleteFiles",
+          "when": "nodeType=~/^mssqlCluster/ && viewItem != mssqlCluster:connection && nodeType != mssqlCluster:message",
+          "group": "1mssqlCluster@4"
+        },
+        {
+          "command": "mssqlCluster.livy.cmd.submitSparkJob",
+          "when": "connectionProvider == MSSQL && nodeType == dataservices",
+          "group": "1root@1"
+        },
+        {
+          "command": "mssqlCluster.livy.cmd.submitFileToSparkJob",
+          "when": "nodeType == mssqlCluster:file && nodeSubType == mssqlCluster:spark",
+          "group": "1mssqlCluster@6"
+        }
+      ]
     },
     "dashboard": {
       "provider": "MSSQL",
@@ -188,9 +388,519 @@
           ]
         }
       ]
+    },
+    "dashboard.tabs": [
+      {
+        "id": "mssql-big-data-cluster",
+        "description": "tab.bigDataClusterDescription",
+        "provider": "MSSQL",
+        "title": "%title.bigDataCluster%",
+        "when": "connectionProvider == 'MSSQL' && mssql:iscluster",
+        "container": {
+          "grid-container": [
+            {
+              "name": "%title.tasks%",
+              "row": 0,
+              "col": 0,
+              "colspan": 2,
+              "widget": {
+                "tasks-widget": [
+                  "mssqlCluster.task.newNotebook",
+                  "mssqlCluster.task.openNotebook",
+                  "mssqlCluster.livy.task.submitSparkJob",
+                  "mssqlCluster.livy.task.openSparkHistory",
+                  "mssqlCluster.livy.task.openYarnHistory"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "connectionProvider": {
+      "providerId": "MSSQL",
+      "displayName": "Microsoft SQL Server",
+      "connectionOptions": [
+        {
+          "specialValueType": "connectionName",
+          "isIdentity": true,
+          "name": "connectionName",
+          "displayName": "Name (optional)",
+          "description": "Custom name of the connection",
+          "groupName": "Source",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": "serverName",
+          "isIdentity": true,
+          "name": "server",
+          "displayName": "Server",
+          "description": "Name of the SQL Server instance",
+          "groupName": "Source",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": true,
+          "isArray": false
+        },
+        {
+          "specialValueType": "databaseName",
+          "isIdentity": true,
+          "name": "database",
+          "displayName": "Database",
+          "description": "The name of the initial catalog or database int the data source",
+          "groupName": "Source",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": "authType",
+          "isIdentity": true,
+          "name": "authenticationType",
+          "displayName": "Authentication type",
+          "description": "Specifies the method of authenticating with SQL Server",
+          "groupName": "Security",
+          "valueType": "category",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": [
+            {
+              "displayName": "SQL Login",
+              "name": "SqlLogin"
+            },
+            {
+              "displayName": "Windows Authentication",
+              "name": "Integrated"
+            },
+            {
+              "displayName": "Azure Active Directory - Universal with MFA support",
+              "name": "AzureMFA"
+            }
+          ],
+          "isRequired": true,
+          "isArray": false
+        },
+        {
+          "specialValueType": "userName",
+          "isIdentity": true,
+          "name": "user",
+          "displayName": "User name",
+          "description": "Indicates the user ID to be used when connecting to the data source",
+          "groupName": "Security",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": true,
+          "isArray": false
+        },
+        {
+          "specialValueType": "password",
+          "isIdentity": true,
+          "name": "password",
+          "displayName": "Password",
+          "description": "Indicates the password to be used when connecting to the data source",
+          "groupName": "Security",
+          "valueType": "password",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": true,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "applicationIntent",
+          "displayName": "Application intent",
+          "description": "Declares the application workload type when connecting to a server",
+          "groupName": "Initialization",
+          "valueType": "category",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": [
+            {
+              "displayName": "ReadWrite",
+              "name": "ReadWrite"
+            },
+            {
+              "displayName": "ReadOnly",
+              "name": "ReadOnly"
+            }
+          ],
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "asynchronousProcessing",
+          "displayName": "Asynchronous processing",
+          "description": "When true, enables usage of the Asynchronous functionality in the .Net Framework Data Provider",
+          "groupName": "Initialization",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "connectTimeout",
+          "displayName": "Connect timeout",
+          "description": "The length of time (in seconds) to wait for a connection to the server before terminating the attempt and generating an error",
+          "groupName": "Initialization",
+          "valueType": "number",
+          "defaultValue": "15",
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "currentLanguage",
+          "displayName": "Current language",
+          "description": "The SQL Server language record name",
+          "groupName": "Initialization",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "columnEncryptionSetting",
+          "displayName": "Column encryption",
+          "description": "Default column encryption setting for all the commands on the connection",
+          "groupName": "Security",
+          "valueType": "category",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": [
+            {
+              "displayName": null,
+              "name": "Disabled"
+            },
+            {
+              "displayName": null,
+              "name": "Enabled"
+            }
+          ],
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "encrypt",
+          "displayName": "Encrypt",
+          "description": "When true, SQL Server uses SSL encryption for all data sent between the client and server if the servers has a certificate installed",
+          "groupName": "Security",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "persistSecurityInfo",
+          "displayName": "Persist security info",
+          "description": "When false, security-sensitive information, such as the password, is not returned as part of the connection",
+          "groupName": "Security",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "trustServerCertificate",
+          "displayName": "Trust server certificate",
+          "description": "When true (and encrypt=true), SQL Server uses SSL encryption for all data sent between the client and server without validating the server certificate",
+          "groupName": "Security",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "attachedDBFileName",
+          "displayName": "Attached DB file name",
+          "description": "The name of the primary file, including the full path name, of an attachable database",
+          "groupName": "Source",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "contextConnection",
+          "displayName": "Context connection",
+          "description": "When true, indicates the connection should be from the SQL server context. Available only when running in the SQL Server process",
+          "groupName": "Source",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "port",
+          "displayName": "Port",
+          "description": null,
+          "groupName": null,
+          "valueType": "number",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "connectRetryCount",
+          "displayName": "Connect retry count",
+          "description": "Number of attempts to restore connection",
+          "groupName": "Connection Resiliency",
+          "valueType": "number",
+          "defaultValue": "1",
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "connectRetryInterval",
+          "displayName": "Connect retry interval",
+          "description": "Delay between attempts to restore connection",
+          "groupName": "Connection Resiliency",
+          "valueType": "number",
+          "defaultValue": "10",
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": "appName",
+          "isIdentity": false,
+          "name": "applicationName",
+          "displayName": "Application name",
+          "description": "The name of the application",
+          "groupName": "Context",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "workstationId",
+          "displayName": "Workstation Id",
+          "description": "The name of the workstation connecting to SQL Server",
+          "groupName": "Context",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "pooling",
+          "displayName": "Pooling",
+          "description": "When true, the connection object is drawn from the appropriate pool, or if necessary, is created and added to the appropriate pool",
+          "groupName": "Pooling",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "maxPoolSize",
+          "displayName": "Max pool size",
+          "description": "The maximum number of connections allowed in the pool",
+          "groupName": "Pooling",
+          "valueType": "number",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "minPoolSize",
+          "displayName": "Min pool size",
+          "description": "The minimum number of connections allowed in the pool",
+          "groupName": "Pooling",
+          "valueType": "number",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "loadBalanceTimeout",
+          "displayName": "Load balance timeout",
+          "description": "The minimum amount of time (in seconds) for this connection to live in the pool before being destroyed",
+          "groupName": "Pooling",
+          "valueType": "number",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "replication",
+          "displayName": "Replication",
+          "description": "Used by SQL Server in Replication",
+          "groupName": "Replication",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "attachDbFilename",
+          "displayName": "Attach DB filename",
+          "description": null,
+          "groupName": null,
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "failoverPartner",
+          "displayName": "Failover partner",
+          "description": "The name or network address of the instance of SQL Server that acts as a failover partner",
+          "groupName": " Source",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "multiSubnetFailover",
+          "displayName": "Multi subnet failover",
+          "description": null,
+          "groupName": null,
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "multipleActiveResultSets",
+          "displayName": "Multiple active result sets",
+          "description": "When true, multiple result sets can be returned and read from one connection",
+          "groupName": "Advanced",
+          "valueType": "boolean",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "packetSize",
+          "displayName": "Packet size",
+          "description": "Size in bytes of the network packets used to communicate with an instance of SQL Server",
+          "groupName": "Advanced",
+          "valueType": "number",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        },
+        {
+          "specialValueType": null,
+          "isIdentity": false,
+          "name": "typeSystemVersion",
+          "displayName": "Type system version",
+          "description": "Indicates which server type system then provider will expose through the DataReader",
+          "groupName": "Advanced",
+          "valueType": "string",
+          "defaultValue": null,
+          "objectType": null,
+          "categoryValues": null,
+          "isRequired": false,
+          "isArray": false
+        }
+      ]
     }
-  },
-  "devDependencies": {
-    "vscode": "1.0.1"
   }
 }

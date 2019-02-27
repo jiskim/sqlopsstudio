@@ -9,13 +9,13 @@ import {
 import { Observable } from 'rxjs/Observable';
 
 import { DashboardWidget, IDashboardWidget, WIDGET_CONFIG, WidgetConfig } from 'sql/parts/dashboard/common/dashboardWidget';
-import { DashboardServiceInterface } from 'sql/parts/dashboard/services/dashboardServiceInterface.service';
+import { CommonServiceInterface } from 'sql/services/common/commonServiceInterface.service';
 import { ComponentHostDirective } from 'sql/parts/dashboard/common/componentHost.directive';
 import { InsightAction, InsightActionContext } from 'sql/workbench/common/actions';
-import { toDisposableSubscription } from 'sql/parts/common/rxjsUtils';
+import { toDisposableSubscription } from 'sql/base/node/rxjsUtils';
 import { IInsightsConfig, IInsightsView } from './interfaces';
 import { Extensions, IInsightRegistry } from 'sql/platform/dashboard/common/insightRegistry';
-import { insertValueRegex } from 'sql/parts/insights/common/interfaces';
+import { insertValueRegex } from 'sql/workbench/services/insights/common/insightsDialogService';
 import { RunInsightQueryAction } from './actions';
 
 import { SimpleExecuteResult } from 'sqlops';
@@ -25,7 +25,14 @@ import * as types from 'vs/base/common/types';
 import * as pfs from 'vs/base/node/pfs';
 import * as nls from 'vs/nls';
 import { Registry } from 'vs/platform/registry/common/platform';
-import { WorkbenchState } from 'vs/platform/workspace/common/workspace';
+import { WorkbenchState, IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
+import { IntervalTimer, createCancelablePromise } from 'vs/base/common/async';
+import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+import { IStorageService, StorageScope } from 'vs/platform/storage/common/storage';
+import { TPromise } from 'vs/base/common/winjs.base';
+import { toDisposable } from 'vs/base/common/lifecycle';
+import { isPromiseCanceledError } from 'vs/base/common/errors';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 
 const insightRegistry = Registry.as<IInsightRegistry>(Extensions.InsightContribution);
 
@@ -41,6 +48,7 @@ interface IStorageResult {
 				<div *ngIf="lastUpdated" style="font-style: italic; font-size: 80%; margin-left: 5px">{{lastUpdated}}</div>
 				<div style="margin: 10px; width: calc(100% - 20px); height: calc(100% - 20px)">
 					<ng-template component-host></ng-template>
+					<loading-spinner [loading]="_loading"></loading-spinner>
 				</div>`,
 	styles: [':host { width: 100%; height: 100% }']
 })
@@ -51,16 +59,22 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 
 	private _typeKey: string;
 	private _init: boolean = false;
+	private _loading: boolean = true;
+	private _intervalTimer: IntervalTimer;
 
 	public error: string;
 	public lastUpdated: string;
 
 	constructor(
 		@Inject(forwardRef(() => ComponentFactoryResolver)) private _componentFactoryResolver: ComponentFactoryResolver,
-		@Inject(forwardRef(() => DashboardServiceInterface)) private dashboardService: DashboardServiceInterface,
+		@Inject(forwardRef(() => CommonServiceInterface)) private dashboardService: CommonServiceInterface,
 		@Inject(WIDGET_CONFIG) protected _config: WidgetConfig,
 		@Inject(forwardRef(() => ViewContainerRef)) private viewContainerRef: ViewContainerRef,
-		@Inject(forwardRef(() => ChangeDetectorRef)) private _cd: ChangeDetectorRef
+		@Inject(forwardRef(() => ChangeDetectorRef)) private _cd: ChangeDetectorRef,
+		@Inject(IInstantiationService) private instantiationService: IInstantiationService,
+		@Inject(IStorageService) private storageService: IStorageService,
+		@Inject(IWorkspaceContextService) private workspaceContextService: IWorkspaceContextService,
+		@Inject(IConfigurationService) private readonly _configurationService: IConfigurationService
 	) {
 		super();
 		this.insightConfig = <IInsightsConfig>this._config.widget['insights-widget'];
@@ -71,22 +85,31 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 			if (!this._checkStorage()) {
 				let promise = this._runQuery();
 				this.queryObv = Observable.fromPromise(promise);
-				promise.then(
-					result => {
-						if (this._init) {
-							this._updateChild(result);
-						} else {
-							this.queryObv = Observable.fromPromise(Promise.resolve<SimpleExecuteResult>(result));
+				let cancelablePromise = createCancelablePromise(() => {
+					return promise.then(
+						result => {
+							this._loading = false;
+							if (this._init) {
+								this._updateChild(result);
+								this.setupInterval();
+							} else {
+								this.queryObv = Observable.fromPromise(TPromise.as<SimpleExecuteResult>(result));
+							}
+						},
+						error => {
+							this._loading = false;
+							if (isPromiseCanceledError(error)) {
+								return;
+							}
+							if (this._init) {
+								this.showError(error);
+							} else {
+								this.queryObv = Observable.fromPromise(TPromise.as<SimpleExecuteResult>(error));
+							}
 						}
-					},
-					error => {
-						if (this._init) {
-							this.showError(error);
-						} else {
-							this.queryObv = Observable.fromPromise(Promise.reject<SimpleExecuteResult>(error));
-						}
-					}
-				);
+					).then(() => this._cd.detectChanges());
+				});
+				this._register(toDisposable(() => cancelablePromise.cancel()));
 			}
 		}, error => {
 			this.showError(error);
@@ -98,12 +121,23 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 		if (this.queryObv) {
 			this._register(toDisposableSubscription(this.queryObv.subscribe(
 				result => {
+					this._loading = false;
 					this._updateChild(result);
+					this.setupInterval();
 				},
 				error => {
+					this._loading = false;
 					this.showError(error);
 				}
 			)));
+		}
+	}
+
+	private setupInterval(): void {
+		if (this.insightConfig.autoRefreshInterval) {
+			this._intervalTimer = new IntervalTimer();
+			this._register(this._intervalTimer);
+			this._intervalTimer.cancelAndSet(() => this.refresh(), this.insightConfig.autoRefreshInterval * 60 * 1000);
 		}
 	}
 
@@ -115,9 +149,9 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 	get actions(): Array<Action> {
 		let actions: Array<Action> = [];
 		if (this.insightConfig.details && (this.insightConfig.details.query || this.insightConfig.details.queryFile)) {
-			actions.push(this.dashboardService.instantiationService.createInstance(InsightAction, InsightAction.ID, InsightAction.LABEL));
+			actions.push(this.instantiationService.createInstance(InsightAction, InsightAction.ID, InsightAction.LABEL));
 		}
-		actions.push(this.dashboardService.instantiationService.createInstance(RunInsightQueryAction, RunInsightQueryAction.ID, RunInsightQueryAction.LABEL));
+		actions.push(this.instantiationService.createInstance(RunInsightQueryAction, RunInsightQueryAction.ID, RunInsightQueryAction.LABEL));
 		return actions;
 	}
 
@@ -130,24 +164,29 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 
 	private _storeResult(result: SimpleExecuteResult): SimpleExecuteResult {
 		if (this.insightConfig.cacheId) {
+			let currentTime = new Date();
 			let store: IStorageResult = {
-				date: new Date().toString(),
+				date: currentTime.toString(),
 				results: result
 			};
-			this.dashboardService.storageService.store(this._getStorageKey(), JSON.stringify(store));
+			this.lastUpdated = nls.localize('insights.lastUpdated', "Last Updated: {0} {1}", currentTime.toLocaleTimeString(), currentTime.toLocaleDateString());
+			this._cd.detectChanges();
+			this.storageService.store(this._getStorageKey(), JSON.stringify(store), StorageScope.GLOBAL);
 		}
 		return result;
 	}
 
 	private _checkStorage(): boolean {
 		if (this.insightConfig.cacheId) {
-			let storage = this.dashboardService.storageService.get(this._getStorageKey());
+			let storage = this.storageService.get(this._getStorageKey(), StorageScope.GLOBAL);
 			if (storage) {
 				let storedResult: IStorageResult = JSON.parse(storage);
 				let date = new Date(storedResult.date);
 				this.lastUpdated = nls.localize('insights.lastUpdated', "Last Updated: {0} {1}", date.toLocaleTimeString(), date.toLocaleDateString());
+				this._loading = false;
 				if (this._init) {
 					this._updateChild(storedResult.results);
+					this.setupInterval();
 					this._cd.detectChanges();
 				} else {
 					this.queryObv = Observable.fromPromise(Promise.resolve<SimpleExecuteResult>(JSON.parse(storage)));
@@ -172,33 +211,36 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 		return `insights.${this.insightConfig.cacheId}.${this.dashboardService.connectionManagementService.connectionInfo.connectionProfile.getOptionsKey()}`;
 	}
 
-	private _runQuery(): Thenable<SimpleExecuteResult> {
-		return this.dashboardService.queryManagementService.runQueryAndReturn(this.insightConfig.query as string).then(
+	private _runQuery(): TPromise<SimpleExecuteResult> {
+		return TPromise.wrap(this.dashboardService.queryManagementService.runQueryAndReturn(this.insightConfig.query as string).then(
 			result => {
 				return this._storeResult(result);
 			},
 			error => {
 				throw error;
 			}
-		);
+		));
 	}
 
 	private _updateChild(result: SimpleExecuteResult): void {
+		this.componentHost.viewContainerRef.clear();
+		this.error = undefined;
+		this._cd.detectChanges();
+
 		if (result.rowCount === 0) {
 			this.showError(nls.localize('noResults', 'No results to show'));
 			return;
 		}
 
 		let componentFactory = this._componentFactoryResolver.resolveComponentFactory<IInsightsView>(insightRegistry.getCtorFromId(this._typeKey));
-		this.componentHost.viewContainerRef.clear();
 
 		let componentRef = this.componentHost.viewContainerRef.createComponent(componentFactory);
 		let componentInstance = componentRef.instance;
-		componentInstance.data = { columns: result.columnInfo.map(item => item.columnName), rows: result.rows.map(row => row.map(item => item.displayValue)) };
 		// check if the setter is defined
 		if (componentInstance.setConfig) {
 			componentInstance.setConfig(this.insightConfig.type[this._typeKey]);
 		}
+		componentInstance.data = { columns: result.columnInfo.map(item => item.columnName), rows: result.rows.map(row => row.map(item => (item.invariantCultureDisplayValue === null || item.invariantCultureDisplayValue === undefined) ? item.displayValue : item.invariantCultureDisplayValue)) };
 
 		if (componentInstance.init) {
 			componentInstance.init();
@@ -226,6 +268,10 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 			throw new Error('No query was specified for this insight');
 		}
 
+		if (this.insightConfig.autoRefreshInterval && !types.isNumber(this.insightConfig.autoRefreshInterval)) {
+			throw new Error('Auto Refresh Interval must be a number if specified');
+		}
+
 		if (!types.isStringArray(this.insightConfig.query)
 			&& !types.isString(this.insightConfig.query)
 			&& !types.isString(this.insightConfig.queryFile)) {
@@ -238,6 +284,14 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 
 		this._typeKey = Object.keys(this.insightConfig.type)[0];
 
+		// When the editor.accessibilitySupport setting is on, we will force the chart type to be table.
+		// so that the information is accessible to the user.
+		// count chart type is already a text based chart, we don't have to apply this rule for it.
+		let isAccessibilitySupportOn = this._configurationService.getValue('editor.accessibilitySupport') === 'on';
+		if (isAccessibilitySupportOn && this._typeKey !== 'count') {
+			this._typeKey = 'table';
+		}
+
 		if (types.isStringArray(this.insightConfig.query)) {
 			this.insightConfig.query = this.insightConfig.query.join(' ');
 		} else if (this.insightConfig.queryFile) {
@@ -248,17 +302,17 @@ export class InsightsWidget extends DashboardWidget implements IDashboardWidget,
 				filePath = filePath.replace(match[0], '');
 
 				//filePath = this.dashboardService.workspaceContextService.toResource(filePath).fsPath;
-				switch (this.dashboardService.workspaceContextService.getWorkbenchState()) {
+				switch (this.workspaceContextService.getWorkbenchState()) {
 					case WorkbenchState.FOLDER:
-						filePath = this.dashboardService.workspaceContextService.getWorkspace().folders[0].toResource(filePath).fsPath;
+						filePath = this.workspaceContextService.getWorkspace().folders[0].toResource(filePath).fsPath;
 						break;
 					case WorkbenchState.WORKSPACE:
 						let filePathArray = filePath.split('/');
 						// filter out empty sections
 						filePathArray = filePathArray.filter(i => !!i);
-						let folder = this.dashboardService.workspaceContextService.getWorkspace().folders.find(i => i.name === filePathArray[0]);
+						let folder = this.workspaceContextService.getWorkspace().folders.find(i => i.name === filePathArray[0]);
 						if (!folder) {
-							return Promise.reject<void[]>(new Error(`Could not find workspace folder ${filePathArray[0]}`));
+							return Promise.reject(new Error(`Could not find workspace folder ${filePathArray[0]}`));
 						}
 						// remove the folder name from the filepath
 						filePathArray.shift();

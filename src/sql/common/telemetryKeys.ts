@@ -23,7 +23,7 @@ export const RunQueryStatement = 'RunQueryStatement';
 export const CancelQuery = 'CancelQuery';
 export const NewQuery = 'NewQuery';
 export const FirewallRuleRequested = 'FirewallRuleCreated';
-
+export const DashboardNavigated = 'DashboardNavigated';
 
 // Telemetry Properties
 
@@ -41,3 +41,22 @@ export const Accounts = 'Accounts';
 export const FireWallRule = 'FirewallRule';
 export const AutoOAuth = 'AutoOAuth';
 export const AddNewDashboardTab = 'AddNewDashboardTab';
+export const ProfilerFilter = 'ProfilerFilter';
+
+// SQL Agent Events:
+
+// Views
+export const JobsView = 'JobsViewOpened';
+export const JobHistoryView = 'JobHistoryViewOpened';
+export const JobStepsView = 'JobStepsViewOpened';
+
+// Actions
+export const RunAgentJob = 'RunAgentJob';
+export const StopAgentJob = 'StopAgentJob';
+export const DeleteAgentJob = 'DeleteAgentJob';
+export const DeleteAgentJobStep = 'DeleteAgentJobStep';
+export const DeleteAgentAlert = 'DeleteAgentAlert';
+export const DeleteAgentOperator = 'DeleteAgentOperator';
+export const DeleteAgentProxy = 'DeleteAgentProxy';
+
+

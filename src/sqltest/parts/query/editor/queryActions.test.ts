@@ -15,22 +15,24 @@ import {
 	INewConnectionParams,
 	ConnectionType,
 	RunQueryOnConnectionMode
-} from 'sql/parts/connection/common/connectionManagement';
-import { ConnectionDialogService } from 'sql/parts/connection/connectionDialog/connectionDialogService';
+} from 'sql/platform/connection/common/connectionManagement';
+import { ConnectionDialogService } from 'sql/workbench/services/connection/browser/connectionDialogService';
 import {
 	RunQueryAction, CancelQueryAction, ListDatabasesActionItem,
 	DisconnectDatabaseAction, ConnectDatabaseAction, QueryTaskbarAction
 } from 'sql/parts/query/execution/queryActions';
 import { QueryInput } from 'sql/parts/query/common/queryInput';
 import { QueryEditor } from 'sql/parts/query/editor/queryEditor';
-import { QueryModelService } from 'sql/parts/query/execution/queryModelService';
-import { ConnectionManagementService } from 'sql/parts/connection/common/connectionManagementService';
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
+import { QueryModelService } from 'sql/platform/query/common/queryModelService';
+import { ConnectionManagementService } from 'sql/platform/connection/common/connectionManagementService';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
 
 import { TestThemeService } from 'sqltest/stubs/themeTestService';
+import { ConfigurationService } from 'vs/platform/configuration/node/configurationService';
 
 import * as TypeMoq from 'typemoq';
 import * as assert from 'assert';
+import { TestStorageService } from 'vs/workbench/test/workbenchTestServices';
 
 let none: void;
 
@@ -40,6 +42,7 @@ suite('SQL QueryAction Tests', () => {
 	let editor: TypeMoq.Mock<QueryEditor>;
 	let calledRunQueryOnInput: boolean = undefined;
 	let testQueryInput: TypeMoq.Mock<QueryInput>;
+	let configurationService: TypeMoq.Mock<ConfigurationService>;
 
 	setup(() => {
 		// Setup a reusable mock QueryInput
@@ -48,7 +51,8 @@ suite('SQL QueryAction Tests', () => {
 		testQueryInput.setup(x => x.runQuery(undefined)).callback(() => { calledRunQueryOnInput = true; });
 
 		// Setup a reusable mock QueryEditor
-		editor = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Strict, undefined, new TestThemeService());
+		editor = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Strict, undefined, new TestThemeService(), undefined, undefined, undefined, undefined,
+			undefined, undefined, undefined, undefined, new TestStorageService());
 		editor.setup(x => x.connectedUri).returns(() => testUri);
 		editor.setup(x => x.currentQueryInput).returns(() => testQueryInput.object);
 		editor.setup(x => x.uri).returns(() => testUri);
@@ -56,6 +60,13 @@ suite('SQL QueryAction Tests', () => {
 		editor.setup(x => x.getSelection()).returns(() => undefined);
 		editor.setup(x => x.getSelection(false)).returns(() => undefined);
 		editor.setup(x => x.isSelectionEmpty()).returns(() => false);
+		configurationService = TypeMoq.Mock.ofInstance({
+			getValue: () => undefined,
+			onDidChangeConfiguration: () => undefined
+		} as any);
+		configurationService.setup(x => x.getValue(TypeMoq.It.isAny())).returns(() => {
+			return {};
+		});
 	});
 
 	test('setClass sets child CSS class correctly', (done) => {
@@ -77,7 +88,8 @@ suite('SQL QueryAction Tests', () => {
 		connectionManagementService.setup(x => x.isConnected(TypeMoq.It.isAnyString())).returns(() => isConnectedReturnValue);
 
 		// ... Create an editor
-		let editor = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Loose, undefined, new TestThemeService());
+		let editor = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Loose, undefined, new TestThemeService(), undefined, undefined, undefined, undefined,
+			undefined, undefined, undefined, undefined, new TestStorageService());
 		editor.setup(x => x.currentQueryInput).returns(() => testQueryInput.object);
 
 		// If I create a QueryTaskbarAction and I pass a non-connected editor to _getConnectedQueryEditorUri
@@ -113,7 +125,7 @@ suite('SQL QueryAction Tests', () => {
 			.returns(() => TPromise.as(none));
 
 		// ... Mock "isConnected" in ConnectionManagementService
-		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, connectionDialogService.object);
+		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, undefined, connectionDialogService.object);
 		connectionManagementService.callBase = true;
 		connectionManagementService.setup(x => x.isConnected(TypeMoq.It.isAnyString())).returns(() => isConnected);
 
@@ -163,7 +175,8 @@ suite('SQL QueryAction Tests', () => {
 		queryInput.setup(x => x.runQuery(undefined)).callback(() => {
 			countCalledRunQuery++;
 		});
-		let queryEditor: TypeMoq.Mock<QueryEditor> = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Strict, undefined, new TestThemeService());
+		let queryEditor: TypeMoq.Mock<QueryEditor> = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Strict, undefined, new TestThemeService(), undefined,
+		undefined, undefined, undefined, undefined, undefined, undefined, undefined, new TestStorageService());
 		queryEditor.setup(x => x.currentQueryInput).returns(() => queryInput.object);
 		queryEditor.setup(x => x.getSelection()).returns(() => undefined);
 		queryEditor.setup(x => x.getSelection(false)).returns(() => undefined);
@@ -229,14 +242,15 @@ suite('SQL QueryAction Tests', () => {
 		});
 
 		// ... Mock "getSelection" in QueryEditor
-		let queryEditor: TypeMoq.Mock<QueryEditor> = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Loose, undefined, new TestThemeService());
+		let queryEditor: TypeMoq.Mock<QueryEditor> = TypeMoq.Mock.ofType(QueryEditor, TypeMoq.MockBehavior.Loose, undefined, new TestThemeService(), undefined,
+		undefined, undefined, undefined, undefined, undefined, undefined, undefined, new TestStorageService());
 		queryEditor.setup(x => x.currentQueryInput).returns(() => queryInput.object);
 		queryEditor.setup(x => x.getSelection()).returns(() => {
 			return selectionToReturnInGetSelection;
 		});
 
 		// ... Mock "isConnected" in ConnectionManagementService
-		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, connectionDialogService.object);
+		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, undefined, connectionDialogService.object);
 		connectionManagementService.callBase = true;
 		connectionManagementService.setup(x => x.isConnected(TypeMoq.It.isAnyString())).returns(() => isConnected);
 
@@ -374,7 +388,7 @@ suite('SQL QueryAction Tests', () => {
 			.returns(() => TPromise.as(none));
 
 		// ... Mock "isConnected" in ConnectionManagementService
-		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, connectionDialogService.object);
+		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, undefined, connectionDialogService.object);
 		connectionManagementService.callBase = true;
 		connectionManagementService.setup(x => x.isConnected(TypeMoq.It.isAnyString())).returns(() => isConnected);
 
@@ -420,7 +434,7 @@ suite('SQL QueryAction Tests', () => {
 			.returns(() => TPromise.as(none));
 
 		// ... Mock "isConnected" in ConnectionManagementService
-		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, connectionDialogService.object);
+		let connectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Loose, {}, {}, undefined, connectionDialogService.object);
 		connectionManagementService.callBase = true;
 		connectionManagementService.setup(x => x.isConnected(TypeMoq.It.isAnyString())).returns(() => isConnected);
 
@@ -463,7 +477,7 @@ suite('SQL QueryAction Tests', () => {
 		});
 
 		// If I query without having initialized anything, state should be clear
-		listItem = new ListDatabasesActionItem(editor.object, undefined, connectionManagementService.object, undefined, undefined, undefined);
+		listItem = new ListDatabasesActionItem(editor.object, undefined, connectionManagementService.object, undefined, undefined, undefined, configurationService.object);
 
 		assert.equal(listItem.isEnabled(), false, 'do not expect dropdown enabled unless connected');
 		assert.equal(listItem.currentDatabaseName, undefined, 'do not expect dropdown to have entries unless connected');
@@ -498,7 +512,7 @@ suite('SQL QueryAction Tests', () => {
 		cms.setup(x => x.getConnectionProfile(TypeMoq.It.isAny())).returns(() => <IConnectionProfile>{ databaseName: databaseName });
 
 		// ... Create a database dropdown that has been connected
-		let listItem = new ListDatabasesActionItem(editor.object, undefined, cms.object, null, null, null);
+		let listItem = new ListDatabasesActionItem(editor.object, undefined, cms.object, null, null, null, configurationService.object);
 		listItem.onConnected();
 
 		// If: I raise a connection changed event
@@ -522,7 +536,7 @@ suite('SQL QueryAction Tests', () => {
 		cms.setup(x => x.getConnectionProfile(TypeMoq.It.isAny())).returns(() => <IConnectionProfile>{ databaseName: databaseName });
 
 		// ... Create a database dropdown that has been connected
-		let listItem = new ListDatabasesActionItem(editor.object, undefined, cms.object, null, null, null);
+		let listItem = new ListDatabasesActionItem(editor.object, undefined, cms.object, null, null, null, configurationService.object);
 		listItem.onConnected();
 
 		// If: I raise a connection changed event for the 'wrong' URI
@@ -549,7 +563,7 @@ suite('SQL QueryAction Tests', () => {
 		cms.setup(x => x.onConnectionChanged).returns(() => dbChangedEmitter.event);
 
 		// ... Create a database dropdown
-		let listItem = new ListDatabasesActionItem(editor.object, undefined, cms.object, null, null, null);
+		let listItem = new ListDatabasesActionItem(editor.object, undefined, cms.object, null, null, null, configurationService.object);
 
 		// If: I raise a connection changed event
 		let eventParams = <IConnectionParams>{

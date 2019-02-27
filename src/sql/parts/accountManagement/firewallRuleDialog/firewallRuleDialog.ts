@@ -6,33 +6,39 @@
 'use strict';
 
 import 'vs/css!./media/firewallRuleDialog';
-import { Builder, $ } from 'vs/base/browser/builder';
+import { Builder, $ } from 'sql/base/browser/builder';
 import * as DOM from 'vs/base/browser/dom';
 import { IPartService } from 'vs/workbench/services/part/common/partService';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 import { IContextViewService } from 'vs/platform/contextview/browser/contextView';
 import { localize } from 'vs/nls';
 import { buttonBackground } from 'vs/platform/theme/common/colorRegistry';
-import { IWorkbenchThemeService, IColorTheme } from 'vs/workbench/services/themes/common/workbenchThemeService';
 import { attachInputBoxStyler } from 'vs/platform/theme/common/styler';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { SIDE_BAR_BACKGROUND } from 'vs/workbench/common/theme';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { IWindowsService } from 'vs/platform/windows/common/windows';
+import { IClipboardService } from 'vs/platform/clipboard/common/clipboardService';
+import { IThemeService, ITheme } from 'vs/platform/theme/common/themeService';
 
 import * as sqlops from 'sqlops';
 import { Button } from 'sql/base/browser/ui/button/button';
-import { Modal } from 'sql/base/browser/ui/modal/modal';
+import { Modal } from 'sql/workbench/browser/modal/modal';
 import { FirewallRuleViewModel } from 'sql/parts/accountManagement/firewallRuleDialog/firewallRuleViewModel';
-import { attachModalDialogStyler, attachButtonStyler } from 'sql/common/theme/styler';
+import { attachModalDialogStyler, attachButtonStyler } from 'sql/platform/theme/common/styler';
 import { InputBox } from 'sql/base/browser/ui/inputBox/inputBox';
-import { IAccountPickerService } from 'sql/parts/accountManagement/common/interfaces';
+import { IAccountPickerService } from 'sql/platform/accountManagement/common/accountPicker';
 import * as TelemetryKeys from 'sql/common/telemetryKeys';
 
-// TODO: Make the help link 1) extensible (01/08/2018, https://github.com/Microsoft/sqlopsstudio/issues/450)
+// TODO: Make the help link 1) extensible (01/08/2018, https://github.com/Microsoft/azuredatastudio/issues/450)
 // in case that other non-Azure sign in is to be used
 const firewallHelpUri = 'https://aka.ms/sqlopsfirewallhelp';
+
+const LocalizedStrings = {
+	FROM: localize('from', 'From'),
+	TO: localize('to', 'To')
+};
 
 export class FirewallRuleDialog extends Modal {
 	public viewModel: FirewallRuleViewModel;
@@ -59,18 +65,21 @@ export class FirewallRuleDialog extends Modal {
 	constructor(
 		@IAccountPickerService private _accountPickerService: IAccountPickerService,
 		@IPartService partService: IPartService,
-		@IWorkbenchThemeService private _themeService: IWorkbenchThemeService,
+		@IThemeService themeService: IThemeService,
 		@IInstantiationService private _instantiationService: IInstantiationService,
 		@IContextViewService private _contextViewService: IContextViewService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IContextKeyService contextKeyService: IContextKeyService,
 		@IWindowsService private _windowsService: IWindowsService,
+		@IClipboardService clipboardService: IClipboardService
 	) {
 		super(
 			localize('createNewFirewallRule', 'Create new firewall rule'),
 			TelemetryKeys.FireWallRule,
 			partService,
 			telemetryService,
+			clipboardService,
+			themeService,
 			contextKeyService,
 			{
 				isFlyout: true,
@@ -92,8 +101,8 @@ export class FirewallRuleDialog extends Modal {
 		attachModalDialogStyler(this, this._themeService);
 		this.backButton.onDidClick(() => this.cancel());
 		this._register(attachButtonStyler(this.backButton, this._themeService, { buttonBackground: SIDE_BAR_BACKGROUND, buttonHoverBackground: SIDE_BAR_BACKGROUND }));
-		this._createButton = this.addFooterButton(localize('ok', 'OK'), () => this.createFirewallRule());
-		this._closeButton = this.addFooterButton(localize('cancel', 'Cancel'), () => this.cancel());
+		this._createButton = this.addFooterButton(localize('firewall.ok', 'OK'), () => this.createFirewallRule());
+		this._closeButton = this.addFooterButton(localize('firewall.cancel', 'Cancel'), () => this.cancel());
 		this.registerListeners();
 	}
 
@@ -140,19 +149,23 @@ export class FirewallRuleDialog extends Modal {
 			subnetIPRangeSection = subnetIPRangeContainer.getHTMLElement();
 			subnetIPRangeContainer.div({ 'class': 'dialog-input-section' }, (inputContainer) => {
 				inputContainer.div({ 'class': 'dialog-label' }, (labelContainer) => {
-					labelContainer.innerHtml(localize('from', 'From'));
+					labelContainer.text(LocalizedStrings.FROM);
 				});
 
 				inputContainer.div({ 'class': 'dialog-input' }, (inputCellContainer) => {
-					this._fromRangeinputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService);
+					this._fromRangeinputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService, {
+						ariaLabel: LocalizedStrings.FROM
+					});
 				});
 
 				inputContainer.div({ 'class': 'dialog-label' }, (labelContainer) => {
-					labelContainer.innerHtml(localize('to', 'To'));
+					labelContainer.text(LocalizedStrings.TO);
 				});
 
 				inputContainer.div({ 'class': 'dialog-input' }, (inputCellContainer) => {
-					this._toRangeinputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService);
+					this._toRangeinputBox = new InputBox(inputCellContainer.getHTMLElement(), this._contextViewService, {
+						ariaLabel: LocalizedStrings.TO
+					});
 				});
 			});
 		});
@@ -193,14 +206,14 @@ export class FirewallRuleDialog extends Modal {
 			builder.append(firewallRuleSection);
 		});
 
-		this._register(this._themeService.onDidColorThemeChange(e => this.updateTheme(e)));
-		this.updateTheme(this._themeService.getColorTheme());
+		this._register(this._themeService.onThemeChange(e => this.updateTheme(e)));
+		this.updateTheme(this._themeService.getTheme());
 
-		jQuery(this._IPAddressInput).on('click', () => {
+		$(this._IPAddressInput).on(DOM.EventType.CLICK, () => {
 			this.onFirewallRuleOptionSelected(true);
 		});
 
-		jQuery(this._subnetIPRangeInput).on('click', () => {
+		$(this._subnetIPRangeInput).on(DOM.EventType.CLICK, () => {
 			this.onFirewallRuleOptionSelected(false);
 		});
 	}
@@ -225,12 +238,12 @@ export class FirewallRuleDialog extends Modal {
 			className += ' header';
 		}
 		container.div({ 'class': className }, (labelContainer) => {
-			labelContainer.innerHtml(content);
+			labelContainer.text(content);
 		});
 	}
 
 	// Update theming that is specific to firewall rule flyout body
-	private updateTheme(theme: IColorTheme): void {
+	private updateTheme(theme: ITheme): void {
 		let linkColor = theme.getColor(buttonBackground);
 		let link = linkColor ? linkColor.toString() : null;
 		if (this._helpLink) {

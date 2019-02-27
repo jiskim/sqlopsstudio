@@ -6,9 +6,9 @@
 import { Component, Inject, forwardRef, ChangeDetectorRef, OnInit, ElementRef, ViewChild } from '@angular/core';
 
 import { DashboardWidget, IDashboardWidget, WidgetConfig, WIDGET_CONFIG } from 'sql/parts/dashboard/common/dashboardWidget';
-import { DashboardServiceInterface } from 'sql/parts/dashboard/services/dashboardServiceInterface.service';
-import { ConnectionManagementInfo } from 'sql/parts/connection/common/connectionManagementInfo';
-import { toDisposableSubscription } from 'sql/parts/common/rxjsUtils';
+import { CommonServiceInterface } from 'sql/services/common/commonServiceInterface.service';
+import { ConnectionManagementInfo } from 'sql/platform/connection/common/connectionManagementInfo';
+import { toDisposableSubscription } from 'sql/base/node/rxjsUtils';
 import { error } from 'sql/base/common/log';
 import { IDashboardRegistry, Extensions as DashboardExtensions } from 'sql/platform/dashboard/common/dashboardRegistry';
 
@@ -68,7 +68,7 @@ export class PropertiesWidgetComponent extends DashboardWidget implements IDashb
 	@ViewChild('parent', { read: ElementRef }) private _parent: ElementRef;
 
 	constructor(
-		@Inject(forwardRef(() => DashboardServiceInterface)) private _bootstrap: DashboardServiceInterface,
+		@Inject(forwardRef(() => CommonServiceInterface)) private _bootstrap: CommonServiceInterface,
 		@Inject(forwardRef(() => ChangeDetectorRef)) private _changeRef: ChangeDetectorRef,
 		@Inject(forwardRef(() => ElementRef)) private _el: ElementRef,
 		@Inject(WIDGET_CONFIG) protected _config: WidgetConfig,

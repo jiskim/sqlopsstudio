@@ -5,10 +5,10 @@
 
 'use strict';
 
-import { ConnectionDialogService } from 'sql/parts/connection/connectionDialog/connectionDialogService';
-import { ConnectionDialogWidget } from 'sql/parts/connection/connectionDialog/connectionDialogWidget';
-import { ConnectionManagementService } from 'sql/parts/connection/common/connectionManagementService';
-import { ConnectionType, IConnectableInput, IConnectionResult, INewConnectionParams } from 'sql/parts/connection/common/connectionManagement';
+import { ConnectionDialogService } from 'sql/workbench/services/connection/browser/connectionDialogService';
+import { ConnectionDialogWidget } from 'sql/workbench/services/connection/browser/connectionDialogWidget';
+import { ConnectionManagementService } from 'sql/platform/connection/common/connectionManagementService';
+import { ConnectionType, IConnectableInput, IConnectionResult, INewConnectionParams } from 'sql/platform/connection/common/connectionManagement';
 import { ContextKeyServiceStub } from 'sqltest/stubs/contextKeyServiceStub';
 import { ErrorMessageServiceStub } from 'sqltest/stubs/errorMessageServiceStub';
 
@@ -23,10 +23,11 @@ suite('ConnectionDialogService tests', () => {
 	setup(() => {
 		let errorMessageService = getMockErrorMessageService();
 		connectionDialogService = new ConnectionDialogService(undefined, undefined, undefined, errorMessageService.object,
-			undefined, undefined, undefined, undefined);
+			undefined, undefined, undefined);
 		mockConnectionManagementService = TypeMoq.Mock.ofType(ConnectionManagementService, TypeMoq.MockBehavior.Strict, {}, {});
 		(connectionDialogService as any)._connectionManagementService = mockConnectionManagementService.object;
 		mockConnectionDialog = TypeMoq.Mock.ofType(ConnectionDialogWidget, TypeMoq.MockBehavior.Strict,
+			undefined,
 			undefined,
 			undefined,
 			undefined,
@@ -55,7 +56,8 @@ suite('ConnectionDialogService tests', () => {
 				onConnectStart: undefined,
 				onConnectSuccess: undefined,
 				onConnectReject: undefined,
-				onDisconnect: undefined
+				onDisconnect: undefined,
+				onConnectCanceled: undefined
 			},
 			runQueryOnCompletion: undefined,
 			querySelection: undefined

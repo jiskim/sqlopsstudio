@@ -7,11 +7,11 @@ import 'vs/css!sql/parts/query/editor/media/queryEditor';
 import { TPromise } from 'vs/base/common/winjs.base';
 import * as strings from 'vs/base/common/strings';
 import * as DOM from 'vs/base/browser/dom';
-import { Builder, Dimension, withElementById } from 'vs/base/browser/builder';
+import * as types from 'vs/base/common/types';
 
-import { EditorInput, EditorOptions } from 'vs/workbench/common/editor';
+import { EditorInput, EditorOptions, IEditorControl, IEditor, TextEditorOptions } from 'vs/workbench/common/editor';
+import * as editorCommon from 'vs/editor/common/editorCommon';
 import { BaseEditor } from 'vs/workbench/browser/parts/editor/baseEditor';
-import { IEditorControl, Position, IEditor } from 'vs/platform/editor/common/editor';
 import { VerticalFlexibleSash, HorizontalFlexibleSash, IFlexibleSash } from 'sql/parts/query/views/flexibleSash';
 import { Orientation } from 'vs/base/browser/ui/sash/sash';
 
@@ -22,14 +22,13 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instanti
 import { UntitledEditorInput } from 'vs/workbench/common/editor/untitledEditorInput';
 import { TextResourceEditor } from 'vs/workbench/browser/parts/editor/textResourceEditor';
 
-import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IContextKey, IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { IContextMenuService } from 'vs/platform/contextview/browser/contextView';
 import { IActionItem } from 'vs/base/browser/ui/actionbar/actionbar';
 import { Action } from 'vs/base/common/actions';
 import { ISelectionData } from 'sqlops';
-import { IEditorGroupService } from 'vs/workbench/services/group/common/groupService';
-import { CodeEditor } from 'vs/editor/browser/codeEditor';
+import { IEditorGroup } from 'vs/workbench/services/group/common/editorGroupsService';
 import { IDisposable } from 'vs/base/common/lifecycle';
 import { IRange } from 'vs/editor/common/core/range';
 
@@ -43,10 +42,13 @@ import {
 	ConnectDatabaseAction, ToggleConnectDatabaseAction, EstimatedQueryPlanAction,
 	ActualQueryPlanAction
 } from 'sql/parts/query/execution/queryActions';
-import { IQueryModelService } from 'sql/parts/query/execution/queryModel';
-import { IEditorDescriptorService } from 'sql/parts/query/editor/editorDescriptorService';
-import { IConnectionManagementService } from 'sql/parts/connection/common/connectionManagement';
-import { attachEditableDropdownStyler } from 'sql/common/theme/styler';
+import { IQueryModelService } from 'sql/platform/query/common/queryModel';
+import { IEditorDescriptorService } from 'sql/workbench/services/queryEditor/common/editorDescriptorService';
+import { IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { CancellationToken } from 'vs/base/common/cancellation';
+import { ICodeEditor } from 'vs/editor/browser/editorBrowser';
+import { IStorageService } from 'vs/platform/storage/common/storage';
 
 /**
  * Editor that hosts 2 sub-editors: A TextResourceEditor for SQL file editing, and a QueryResultsEditor
@@ -65,7 +67,7 @@ export class QueryEditor extends BaseEditor {
 	private _sash: IFlexibleSash;
 	private _editorTopOffset: number;
 	private _orientation: Orientation;
-	private _dimension: Dimension;
+	private _dimension: DOM.Dimension;
 
 	private _resultsEditor: QueryResultsEditor;
 	private _resultsEditorContainer: HTMLElement;
@@ -92,20 +94,30 @@ export class QueryEditor extends BaseEditor {
 		@ITelemetryService _telemetryService: ITelemetryService,
 		@IThemeService themeService: IThemeService,
 		@IInstantiationService private _instantiationService: IInstantiationService,
-		@IWorkbenchEditorService private _editorService: IWorkbenchEditorService,
+		@IEditorService private _editorService: IEditorService,
 		@IContextMenuService private _contextMenuService: IContextMenuService,
 		@IQueryModelService private _queryModelService: IQueryModelService,
 		@IEditorDescriptorService private _editorDescriptorService: IEditorDescriptorService,
-		@IEditorGroupService private _editorGroupService: IEditorGroupService,
 		@IContextKeyService contextKeyService: IContextKeyService,
-		@IConnectionManagementService private _connectionManagementService: IConnectionManagementService
+		@IConnectionManagementService private _connectionManagementService: IConnectionManagementService,
+		@IConfigurationService private _configurationService: IConfigurationService,
+		@IStorageService storageService: IStorageService
 	) {
-		super(QueryEditor.ID, _telemetryService, themeService);
+		super(QueryEditor.ID, _telemetryService, themeService, storageService);
 
 		this._orientation = Orientation.HORIZONTAL;
 
 		if (contextKeyService) {
 			this.queryEditorVisible = queryContext.QueryEditorVisibleContext.bindTo(contextKeyService);
+		}
+
+		if (_editorService) {
+			_editorService.overrideOpenEditor((editor, options, group) => {
+				if (this.isVisible() && (editor !== this.input || group !== this.group)) {
+					this.saveEditorViewState();
+				}
+				return {};
+			});
 		}
 	}
 
@@ -137,10 +149,10 @@ export class QueryEditor extends BaseEditor {
 	}
 
 	/**
-	 * Called to create the editor in the parent builder.
+	 * Called to create the editor in the parent element.
 	 */
-	public createEditor(parent: Builder): void {
-		const parentElement = parent.getHTMLElement();
+	public createEditor(parent: HTMLElement): void {
+		const parentElement = parent;
 		DOM.addClass(parentElement, 'side-by-side-editor');
 		this._createTaskbar(parentElement);
 	}
@@ -148,7 +160,7 @@ export class QueryEditor extends BaseEditor {
 	/**
 	 * Sets the input data for this editor.
 	 */
-	public setInput(newInput: QueryInput, options?: EditorOptions): TPromise<void> {
+	public setInput(newInput: QueryInput, options?: EditorOptions): Thenable<void> {
 		const oldInput = <QueryInput>this.input;
 
 		if (newInput.matches(oldInput)) {
@@ -162,21 +174,21 @@ export class QueryEditor extends BaseEditor {
 		let selectionCallback: IDisposable = newInput.updateSelectionEvent((selection) => this._setSelection(selection));
 		newInput.setEventCallbacks([taskbarCallback, showResultsCallback, selectionCallback]);
 
-		return super.setInput(newInput, options)
+		return super.setInput(newInput, options, CancellationToken.None)
 			.then(() => this._updateInput(oldInput, newInput, options));
 	}
 
 	/**
 	 * Sets this editor and the 2 sub-editors to visible.
 	 */
-	public setEditorVisible(visible: boolean, position: Position): void {
+	public setEditorVisible(visible: boolean, group: IEditorGroup): void {
 		if (this._resultsEditor) {
-			this._resultsEditor.setVisible(visible, position);
+			this._resultsEditor.setVisible(visible, group);
 		}
 		if (this._sqlEditor) {
-			this._sqlEditor.setVisible(visible, position);
+			this._sqlEditor.setVisible(visible, group);
 		}
-		super.setEditorVisible(visible, position);
+		super.setEditorVisible(visible, group);
 
 		// Note: must update after calling super.setEditorVisible so that the accurate count is handled
 		this.updateQueryEditorVisible(visible);
@@ -188,7 +200,7 @@ export class QueryEditor extends BaseEditor {
 			let visible = currentEditorIsVisible;
 			if (!currentEditorIsVisible) {
 				// Current editor is closing but still tracked as visible. Check if any other editor is visible
-				const candidates = [...this._editorService.getVisibleEditors()].filter(e => {
+				const candidates = [...this._editorService.visibleControls].filter(e => {
 					if (e && e.getId) {
 						return e.getId() === QueryEditor.ID;
 					}
@@ -200,20 +212,6 @@ export class QueryEditor extends BaseEditor {
 			}
 			this.queryEditorVisible.set(visible);
 		}
-	}
-
-
-	/**
-	 * Changes the position of the editor.
-	 */
-	public changePosition(position: Position): void {
-		if (this._resultsEditor) {
-			this._resultsEditor.changePosition(position);
-		}
-		if (this._sqlEditor) {
-			this._sqlEditor.changePosition(position);
-		}
-		super.changePosition(position);
 	}
 
 	/**
@@ -244,7 +242,7 @@ export class QueryEditor extends BaseEditor {
 	 * Updates the internal variable keeping track of the editor's size, and re-calculates the sash position.
 	 * To be called when the container of this editor changes size.
 	 */
-	public layout(dimension: Dimension): void {
+	public layout(dimension: DOM.Dimension): void {
 		this._dimension = dimension;
 
 		if (this._sash) {
@@ -294,14 +292,15 @@ export class QueryEditor extends BaseEditor {
 			return;
 		}
 
-		this._editorGroupService.pinEditor(this.position, this.input);
+		const activeControl = this._editorService.activeControl;
+		activeControl.group.pinEditor(activeControl.input);
 
 		let input = <QueryInput>this.input;
 		this._createResultsEditorContainer();
 
-		this._createEditor(<QueryResultsInput>input.results, this._resultsEditorContainer)
+		this._createEditor(<QueryResultsInput>input.results, this._resultsEditorContainer, this.group)
 			.then(result => {
-				this._onResultsEditorCreated(<QueryResultsEditor>result, input.results, this.options);
+				this._onResultsEditorCreated(<any>result, input.results, this.options);
 				this.resultsEditorVisibility = true;
 				this.hideQueryResultsView = false;
 				this._doLayout(true);
@@ -354,7 +353,7 @@ export class QueryEditor extends BaseEditor {
 	public isSelectionEmpty(): boolean {
 		if (this._sqlEditor && this._sqlEditor.getControl()) {
 			let control = this._sqlEditor.getControl();
-			let codeEditor: CodeEditor = <CodeEditor>control;
+			let codeEditor: ICodeEditor = <ICodeEditor>control;
 
 			if (codeEditor) {
 				let value = codeEditor.getValue();
@@ -366,10 +365,46 @@ export class QueryEditor extends BaseEditor {
 		return true;
 	}
 
+	public getAllText(): string {
+		if (this._sqlEditor && this._sqlEditor.getControl()) {
+			let control = this._sqlEditor.getControl();
+			let codeEditor: ICodeEditor = <ICodeEditor>control;
+			if (codeEditor) {
+				let value = codeEditor.getValue();
+				if (value !== undefined && value.length > 0) {
+					return value;
+				} else {
+					return '';
+				}
+			}
+		}
+		return undefined;
+	}
+
+	public getAllSelection(): ISelectionData {
+		if (this._sqlEditor && this._sqlEditor.getControl()) {
+			let control = this._sqlEditor.getControl();
+			let codeEditor: ICodeEditor = <ICodeEditor>control;
+			if (codeEditor) {
+				let model = codeEditor.getModel();
+				let totalLines = model.getLineCount();
+				let endColumn = model.getLineMaxColumn(totalLines);
+				let selection: ISelectionData = {
+					startLine: 0,
+					startColumn: 0,
+					endLine: totalLines - 1,
+					endColumn: endColumn - 1,
+				};
+				return selection;
+			}
+		}
+		return undefined;
+	}
+
 	public getSelectionText(): string {
 		if (this._sqlEditor && this._sqlEditor.getControl()) {
 			let control = this._sqlEditor.getControl();
-			let codeEditor: CodeEditor = <CodeEditor>control;
+			let codeEditor: ICodeEditor = <ICodeEditor>control;
 			let vscodeSelection = control.getSelection();
 
 			if (codeEditor && vscodeSelection) {
@@ -415,6 +450,13 @@ export class QueryEditor extends BaseEditor {
 		this._connectionManagementService.rebuildIntelliSenseCache(this.connectedUri);
 	}
 
+	public setOptions(options: EditorOptions): void {
+		const textOptions = <TextEditorOptions>options;
+		if (textOptions && types.isFunction(textOptions.apply)) {
+			textOptions.apply(this.getControl() as editorCommon.IEditor, editorCommon.ScrollType.Smooth);
+		}
+	}
+
 	// PRIVATE METHODS ////////////////////////////////////////////////////////////
 
 	/**
@@ -436,6 +478,16 @@ export class QueryEditor extends BaseEditor {
 		this._estimatedQueryPlanAction = this._instantiationService.createInstance(EstimatedQueryPlanAction, this);
 		this._actualQueryPlanAction = this._instantiationService.createInstance(ActualQueryPlanAction, this);
 
+		this.setTaskbarContent();
+
+		this._toDispose.push(this._configurationService.onDidChangeConfiguration(e => {
+			if (e.affectedKeys.includes('workbench.enablePreviewFeatures')) {
+				this.setTaskbarContent();
+			}
+		}));
+	}
+
+	private setTaskbarContent(): void {
 		// Create HTML Elements for the taskbar
 		let separator = Taskbar.createTaskbarSeparator();
 
@@ -448,8 +500,15 @@ export class QueryEditor extends BaseEditor {
 			{ action: this._changeConnectionAction },
 			{ action: this._listDatabasesAction },
 			{ element: separator },
-			{ action: this._estimatedQueryPlanAction },
+			{ action: this._estimatedQueryPlanAction }
 		];
+
+		// Remove the estimated query plan action if preview features are not enabled
+		let previewFeaturesEnabled = this._configurationService.getValue('workbench')['enablePreviewFeatures'];
+		if (!previewFeaturesEnabled) {
+			content = content.slice(0, -2);
+		}
+
 		this._taskbar.setContent(content);
 	}
 
@@ -471,7 +530,7 @@ export class QueryEditor extends BaseEditor {
 	public get listDatabasesActionItem(): ListDatabasesActionItem {
 		if (!this._listDatabasesActionItem) {
 			this._listDatabasesActionItem = this._instantiationService.createInstance(ListDatabasesActionItem, this, this._listDatabasesAction);
-			this._register(attachEditableDropdownStyler(this._listDatabasesActionItem, this.themeService));
+			this._register(this._listDatabasesActionItem.attachStyler(this.themeService));
 		}
 		return this._listDatabasesActionItem;
 	}
@@ -480,7 +539,6 @@ export class QueryEditor extends BaseEditor {
 	 * Handles setting input for this editor.
 	 */
 	private _updateInput(oldInput: QueryInput, newInput: QueryInput, options?: EditorOptions): TPromise<void> {
-
 		if (this._sqlEditor) {
 			this._sqlEditor.clearInput();
 		}
@@ -528,8 +586,8 @@ export class QueryEditor extends BaseEditor {
 		if (this._isResultsEditorVisible()) {
 			createEditors = () => {
 				return TPromise.join([
-					this._createEditor(<QueryResultsInput>newInput.results, this._resultsEditorContainer),
-					this._createEditor(<UntitledEditorInput>newInput.sql, this._sqlEditorContainer)
+					this._createEditor(<QueryResultsInput>newInput.results, this._resultsEditorContainer, this.group),
+					this._createEditor(<UntitledEditorInput>newInput.sql, this._sqlEditorContainer, this.group)
 				]);
 			};
 			onEditorsCreated = (result: IEditor[]) => {
@@ -542,10 +600,12 @@ export class QueryEditor extends BaseEditor {
 			// If only the sql editor exists, create a promise and wait for the sql editor to be created
 		} else {
 			createEditors = () => {
-				return this._createEditor(<UntitledEditorInput>newInput.sql, this._sqlEditorContainer);
+				return this._createEditor(<UntitledEditorInput>newInput.sql, this._sqlEditorContainer, this.group);
 			};
 			onEditorsCreated = (result: TextResourceEditor) => {
-				return this._onSqlEditorCreated(result, newInput.sql, options);
+				return TPromise.join([
+					this._onSqlEditorCreated(result, newInput.sql, options)
+				]);
 			};
 		}
 
@@ -558,30 +618,38 @@ export class QueryEditor extends BaseEditor {
 		// Run all three steps synchronously
 		return createEditors()
 			.then(onEditorsCreated)
-			.then(doLayout);
+			.then(doLayout)
+			.then(() => {
+				if (newInput.results) {
+					newInput.results.onRestoreViewStateEmitter.fire();
+				}
+				if (newInput.savedViewState) {
+					this._sqlEditor.getControl().restoreViewState(newInput.savedViewState);
+				}
+			});
 	}
 
 	/**
 	 * Create a single editor based on the type of the given EditorInput.
 	 */
-	private _createEditor(editorInput: EditorInput, container: HTMLElement): TPromise<BaseEditor> {
+	private _createEditor(editorInput: EditorInput, container: HTMLElement, group: IEditorGroup): TPromise<BaseEditor> {
 		const descriptor = this._editorDescriptorService.getEditor(editorInput);
 		if (!descriptor) {
 			return TPromise.wrapError(new Error(strings.format('Can not find a registered editor for the input {0}', editorInput)));
 		}
 
 		let editor = descriptor.instantiate(this._instantiationService);
-		editor.create(new Builder(container));
-		editor.setVisible(this.isVisible(), this.position);
+		editor.create(container);
+		editor.setVisible(this.isVisible(), group);
 		return TPromise.as(editor);
 	}
 
 	/**
 	 * Sets input for the SQL editor after it has been created.
 	 */
-	private _onSqlEditorCreated(sqlEditor: TextResourceEditor, sqlInput: UntitledEditorInput, options: EditorOptions): TPromise<void> {
+	private _onSqlEditorCreated(sqlEditor: TextResourceEditor, sqlInput: UntitledEditorInput, options: EditorOptions): Thenable<void> {
 		this._sqlEditor = sqlEditor;
-		return this._sqlEditor.setInput(sqlInput, options);
+		return this._sqlEditor.setInput(sqlInput, options, CancellationToken.None);
 	}
 
 	/**
@@ -596,7 +664,7 @@ export class QueryEditor extends BaseEditor {
 	 * Appends the HTML for the SQL editor. Creates new HTML every time.
 	 */
 	private _createSqlEditorContainer() {
-		const parentElement = this.getContainer().getHTMLElement();
+		const parentElement = this.getContainer();
 		this._sqlEditorContainer = DOM.append(parentElement, DOM.$('.details-editor-container'));
 		this._sqlEditorContainer.style.position = 'absolute';
 	}
@@ -609,7 +677,7 @@ export class QueryEditor extends BaseEditor {
 	private _createResultsEditorContainer() {
 		this._createSash();
 
-		const parentElement = this.getContainer().getHTMLElement();
+		const parentElement = this.getContainer();
 		let input = <QueryInput>this.input;
 
 		if (!input.results.container) {
@@ -632,7 +700,7 @@ export class QueryEditor extends BaseEditor {
 	 */
 	private _createSash(): void {
 		if (!this._sash) {
-			let parentElement: HTMLElement = this.getContainer().getHTMLElement();
+			let parentElement: HTMLElement = this.getContainer();
 
 			if (this._orientation === Orientation.HORIZONTAL) {
 				this._sash = this._register(new HorizontalFlexibleSash(parentElement, this._minEditorSize));
@@ -655,7 +723,7 @@ export class QueryEditor extends BaseEditor {
 		if (this._orientation === Orientation.HORIZONTAL) {
 			this._sash.setDimenesion(this._dimension);
 		} else {
-			this._sash.setDimenesion(new Dimension(this._dimension.width, this._dimension.height - this.getTaskBarHeight()));
+			this._sash.setDimenesion(new DOM.Dimension(this._dimension.width, this._dimension.height - this.getTaskBarHeight()));
 		}
 
 	}
@@ -692,13 +760,13 @@ export class QueryEditor extends BaseEditor {
 
 	private _doLayoutHorizontal(): void {
 		let splitPointTop: number = this._sash.getSplitPoint();
-		let parent: ClientRect = this.getContainer().getHTMLElement().getBoundingClientRect();
+		let parent: ClientRect = this.getContainer().getBoundingClientRect();
 
 		let sqlEditorHeight = splitPointTop - (parent.top + this.getTaskBarHeight());
 
-		let titleBar = withElementById('workbench.parts.titlebar');
+		let titleBar = document.getElementById('workbench.parts.titlebar');
 		if (titleBar) {
-			sqlEditorHeight += DOM.getContentHeight(titleBar.getHTMLElement());
+			sqlEditorHeight += DOM.getContentHeight(titleBar);
 		}
 
 		let queryResultsEditorHeight = parent.bottom - splitPointTop;
@@ -711,13 +779,13 @@ export class QueryEditor extends BaseEditor {
 		this._resultsEditorContainer.style.width = `${this._dimension.width}px`;
 		this._resultsEditorContainer.style.top = `${splitPointTop}px`;
 
-		this._sqlEditor.layout(new Dimension(this._dimension.width, sqlEditorHeight));
-		this._resultsEditor.layout(new Dimension(this._dimension.width, queryResultsEditorHeight));
+		this._sqlEditor.layout(new DOM.Dimension(this._dimension.width, sqlEditorHeight));
+		this._resultsEditor.layout(new DOM.Dimension(this._dimension.width, queryResultsEditorHeight));
 	}
 
 	private _doLayoutVertical(): void {
 		let splitPointLeft: number = this._sash.getSplitPoint();
-		let parent: ClientRect = this.getContainer().getHTMLElement().getBoundingClientRect();
+		let parent: ClientRect = this.getContainer().getBoundingClientRect();
 
 		let sqlEditorWidth = splitPointLeft;
 		let queryResultsEditorWidth = parent.width - splitPointLeft;
@@ -732,8 +800,8 @@ export class QueryEditor extends BaseEditor {
 		this._resultsEditorContainer.style.height = `${this._dimension.height - taskbarHeight}px`;
 		this._resultsEditorContainer.style.left = `${splitPointLeft}px`;
 
-		this._sqlEditor.layout(new Dimension(sqlEditorWidth, this._dimension.height - taskbarHeight));
-		this._resultsEditor.layout(new Dimension(queryResultsEditorWidth, this._dimension.height - taskbarHeight));
+		this._sqlEditor.layout(new DOM.Dimension(sqlEditorWidth, this._dimension.height - taskbarHeight));
+		this._resultsEditor.layout(new DOM.Dimension(queryResultsEditorWidth, this._dimension.height - taskbarHeight));
 	}
 
 	private _doLayoutSql() {
@@ -745,7 +813,7 @@ export class QueryEditor extends BaseEditor {
 		}
 
 		if (this._dimension) {
-			this._sqlEditor.layout(new Dimension(this._dimension.width, this._dimension.height - this.getTaskBarHeight()));
+			this._sqlEditor.layout(new DOM.Dimension(this._dimension.width, this._dimension.height - this.getTaskBarHeight()));
 		}
 	}
 
@@ -769,7 +837,7 @@ export class QueryEditor extends BaseEditor {
 			this._resultsEditor = null;
 		}
 
-		let thisEditorParent: HTMLElement = this.getContainer().getHTMLElement();
+		let thisEditorParent: HTMLElement = this.getContainer();
 
 		if (this._sqlEditorContainer) {
 			let sqlEditorParent: HTMLElement = this._sqlEditorContainer.parentElement;
@@ -846,6 +914,18 @@ export class QueryEditor extends BaseEditor {
 		editor.revealRange(rangeConversion);
 		editor.setSelection(rangeConversion);
 		editor.focus();
+	}
+
+	private saveEditorViewState(): void {
+		let queryInput = this.input as QueryInput;
+		if (queryInput) {
+			if (this._sqlEditor) {
+				queryInput.savedViewState = this._sqlEditor.getControl().saveViewState();
+			}
+			if (queryInput.results) {
+				queryInput.results.onSaveViewStateEmitter.fire();
+			}
+		}
 	}
 
 	// TESTING PROPERTIES ////////////////////////////////////////////////////////////

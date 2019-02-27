@@ -21,6 +21,10 @@ export const serverDashboardPropertiesSchema: IJSONSchema = {
 	oneOf: [
 		{ type: 'boolean' },
 		{
+			type: 'string',
+			enum: ['collapsed']
+		},
+		{
 			type: 'object',
 			properties: {
 				provider: {
@@ -73,7 +77,7 @@ let defaultVal = [
 	{
 		name: 'Tasks',
 		widget: {
-			'tasks-widget': {}
+			'tasks-widget': [{ name: 'restore', when: '!mssql:iscloud' }, 'configureDashboard', 'newQuery']
 		},
 		gridItemConfig: {
 			sizex: 1,
@@ -81,6 +85,7 @@ let defaultVal = [
 		}
 	},
 	{
+		name: 'Search',
 		gridItemConfig: {
 			sizex: 1,
 			sizey: 2
@@ -91,16 +96,12 @@ let defaultVal = [
 	},
 	{
 		widget: {
-			'backup-history-server-insight': {
-				cacheId: '0c7cba8b-c87a-4bcc-ae54-2f40a5503a90'
-			}
+			'backup-history-server-insight': null
 		}
 	},
 	{
 		widget: {
-			'all-database-size-server-insight': {
-				cacheId: '1d7cba8b-c87a-4bcc-ae54-2f40a5503a90'
-			}
+			'all-database-size-server-insight': null
 		}
 	}
 ];
@@ -116,8 +117,7 @@ export const serverDashboardTabsSchema: IJSONSchema = {
 	type: ['array'],
 	description: nls.localize('dashboardServerTabs', 'Customizes the Server dashboard tabs'),
 	items: generateDashboardTabSchema('server'),
-	default: [
-	]
+	default: []
 };
 
 export const SERVER_DASHBOARD_SETTING = 'dashboard.server.widgets';

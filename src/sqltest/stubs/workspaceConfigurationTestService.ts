@@ -4,13 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-import { IWorkspaceConfigurationService  } from 'vs/workbench/services/configuration/common/configuration';
-import { IConfigurationData, IConfigurationOverrides, ConfigurationTarget } from 'vs/platform/configuration/common/configuration';
-import { IConfigurationValue } from 'vs/workbench/services/configuration/node/configurationEditingService';
-import { IConfigurationChangeEvent } from 'vs/platform/configuration/common/configuration';
+import { IWorkspaceConfigurationService } from 'vs/workbench/services/configuration/common/configuration';
+import { IConfigurationData, IConfigurationOverrides, ConfigurationTarget, IConfigurationChangeEvent } from 'vs/platform/configuration/common/configuration';
 
-import { TPromise } from 'vs/base/common/winjs.base';
-import Event from 'vs/base/common/event';
+import { Event } from 'vs/base/common/event';
 import { IWorkspaceFolder } from 'vs/platform/workspace/common/workspace';
 
 export class WorkspaceConfigurationTestService implements IWorkspaceConfigurationService {
@@ -21,32 +18,32 @@ export class WorkspaceConfigurationTestService implements IWorkspaceConfiguratio
 	getValue<T>(overrides: IConfigurationOverrides): T;
 	getValue<T>(section: string, overrides: IConfigurationOverrides): T;
 	getValue(arg1?: any, arg2?: any): any {
-		return TPromise.as(null);
+		return Promise.resolve(null);
 	}
 
 	onDidChangeConfiguration: Event<IConfigurationChangeEvent>;
 
-	getConfigurationData(): IConfigurationData  { return undefined; }
+	getConfigurationData(): IConfigurationData { return undefined; }
 
 	getConfiguration<T>(): T;
 	getConfiguration<T>(section: string): T;
 	getConfiguration<T>(overrides: IConfigurationOverrides): T;
 	getConfiguration<T>(section: string, overrides: IConfigurationOverrides): T;
 	getConfiguration(arg1?: any, arg2?: any): any {
-		return TPromise.as(null);
+		return Promise.resolve(null);
 	}
 
-	updateValue(key: string, value: any): TPromise<void>
-	updateValue(key: string, value: any, overrides: IConfigurationOverrides): TPromise<void>
-	updateValue(key: string, value: any, target: ConfigurationTarget): TPromise<void>
-	updateValue(key: string, value: any, overrides: IConfigurationOverrides, target: ConfigurationTarget): TPromise<void>
-	updateValue(key: string, value: any, overrides: IConfigurationOverrides, target: ConfigurationTarget, donotNotifyError: boolean): TPromise<void>
-	updateValue(key: string, value: any, arg3?: any, arg4?: any, donotNotifyError?: any): TPromise<void> {
-		return TPromise.as(null);
+	updateValue(key: string, value: any): Promise<void>;
+	updateValue(key: string, value: any, overrides: IConfigurationOverrides): Promise<void>;
+	updateValue(key: string, value: any, target: ConfigurationTarget): Promise<void>;
+	updateValue(key: string, value: any, overrides: IConfigurationOverrides, target: ConfigurationTarget): Promise<void>;
+	updateValue(key: string, value: any, overrides: IConfigurationOverrides, target: ConfigurationTarget, donotNotifyError: boolean): Promise<void>;
+	updateValue(key: string, value: any, arg3?: any, arg4?: any, donotNotifyError?: any): Promise<void> {
+		return Promise.resolve(null);
 	}
 
-	reloadConfiguration(folder?: IWorkspaceFolder, key?: string): TPromise<void> {
-		return TPromise.as(null);
+	reloadConfiguration(folder?: IWorkspaceFolder, key?: string): Promise<void> {
+		return Promise.resolve(null);
 	}
 
 	inspect<T>(key: string): {
@@ -56,7 +53,7 @@ export class WorkspaceConfigurationTestService implements IWorkspaceConfiguratio
 		workspaceFolder: T,
 		memory?: T,
 		value: T,
-	}  { return undefined; }
+	} { return undefined; }
 
 	keys(): {
 		default: string[];
@@ -64,7 +61,7 @@ export class WorkspaceConfigurationTestService implements IWorkspaceConfiguratio
 		workspace: string[];
 		workspaceFolder: string[];
 		memory?: string[];
-	}  { return undefined; }
+	} { return undefined; }
 
 	getUnsupportedWorkspaceKeys(): string[] { return undefined; }
 }

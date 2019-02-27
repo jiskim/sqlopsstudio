@@ -8,12 +8,12 @@
 import { Registry } from 'vs/platform/registry/common/platform';
 import { IWorkbenchActionRegistry, Extensions } from 'vs/workbench/common/actions';
 import { SyncActionDescriptor } from 'vs/platform/actions/common/actions';
-import { IExtensionPointUser, ExtensionsRegistry } from 'vs/platform/extensions/common/extensionsRegistry';
+import { IExtensionPointUser, ExtensionsRegistry } from 'vs/workbench/services/extensions/common/extensionsRegistry';
 import { IJSONSchema } from 'vs/base/common/jsonSchema';
 import { localize } from 'vs/nls';
 import { join } from 'path';
 import { createCSSRule } from 'vs/base/browser/dom';
-import URI from 'vs/base/common/uri';
+import { URI } from 'vs/base/common/uri';
 
 import { ManageLinkedAccountAction } from 'sql/parts/accountManagement/accountListStatusbar/accountListStatusbarItem';
 
@@ -83,11 +83,11 @@ ExtensionsRegistry.registerExtensionPoint<IAccountContrib | IAccountContrib[]>('
 		if (icon) {
 			iconClass = id;
 			if (typeof icon === 'string') {
-				const path = join(extension.description.extensionFolderPath, icon);
+				const path = join(extension.description.extensionLocation.fsPath, icon);
 				createCSSRule(`.icon.${iconClass}`, `background-image: url("${URI.file(path).toString()}")`);
 			} else {
-				const light = join(extension.description.extensionFolderPath, icon.light);
-				const dark = join(extension.description.extensionFolderPath, icon.dark);
+				const light = join(extension.description.extensionLocation.fsPath, icon.light);
+				const dark = join(extension.description.extensionLocation.fsPath, icon.dark);
 				createCSSRule(`.icon.${iconClass}`, `background-image: url("${URI.file(light).toString()}")`);
 				createCSSRule(`.vs-dark .icon.${iconClass}, .hc-black .icon.${iconClass}`, `background-image: url("${URI.file(dark).toString()}")`);
 			}

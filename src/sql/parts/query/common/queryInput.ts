@@ -4,16 +4,35 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TPromise } from 'vs/base/common/winjs.base';
-import { EditorInput, EditorModel, ConfirmResult, EncodingMode, IEncodingSupport } from 'vs/workbench/common/editor';
-import { IConnectionManagementService, IConnectableInput, INewConnectionParams, RunQueryOnConnectionMode } from 'sql/parts/connection/common/connectionManagement';
-import { UntitledEditorInput } from 'vs/workbench/common/editor/untitledEditorInput';
-import { QueryResultsInput } from 'sql/parts/query/common/queryResultsInput';
-import { IQueryModelService } from 'sql/parts/query/execution/queryModel';
+import { localize } from 'vs/nls';
 import { IDisposable, dispose } from 'vs/base/common/lifecycle';
-import Event, { Emitter } from 'vs/base/common/event';
-import URI from 'vs/base/common/uri';
+import { Event, Emitter } from 'vs/base/common/event';
+import { URI } from 'vs/base/common/uri';
+import { UntitledEditorInput } from 'vs/workbench/common/editor/untitledEditorInput';
+import { EditorInput, EditorModel, ConfirmResult, EncodingMode, IEncodingSupport } from 'vs/workbench/common/editor';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { IEditorViewState } from 'vs/editor/common/editorCommon';
+
+import { IConnectionManagementService, IConnectableInput, INewConnectionParams, RunQueryOnConnectionMode } from 'sql/platform/connection/common/connectionManagement';
+import { QueryResultsInput } from 'sql/parts/query/common/queryResultsInput';
+import { IQueryModelService } from 'sql/platform/query/common/queryModel';
+import { IQueryEditorService } from 'sql/workbench/services/queryEditor/common/queryEditorService';
+
 import { ISelectionData, ExecutionPlanOptions } from 'sqlops';
-import { IQueryEditorService } from 'sql/parts/query/common/queryEditorService';
+
+const MAX_SIZE = 13;
+
+function trimTitle(title: string): string {
+	const length = title.length;
+	const diff = length - MAX_SIZE;
+
+	if (Math.sign(diff) <= 0) {
+		return title;
+	} else {
+		const start = (length / 2) - (diff / 2);
+		return title.slice(0, start) + '...' + title.slice(start + diff, length);
+	}
+}
 
 /**
  * Input for the QueryEditor. This input is simply a wrapper around a QueryResultsInput for the QueryResultsEditor
@@ -35,21 +54,21 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 	private _showQueryResultsEditor: Emitter<void>;
 	private _updateSelection: Emitter<ISelectionData>;
 
-	private _toDispose: IDisposable[];
 	private _currentEventCallbacks: IDisposable[];
 
+	public savedViewState: IEditorViewState;
+
 	constructor(
-		private _name: string,
 		private _description: string,
 		private _sql: UntitledEditorInput,
 		private _results: QueryResultsInput,
 		private _connectionProviderName: string,
 		@IConnectionManagementService private _connectionManagementService: IConnectionManagementService,
 		@IQueryModelService private _queryModelService: IQueryModelService,
-		@IQueryEditorService private _queryEditorService: IQueryEditorService
+		@IQueryEditorService private _queryEditorService: IQueryEditorService,
+		@IConfigurationService private _configurationService: IConfigurationService
 	) {
 		super();
-		let self = this;
 		this._updateTaskbar = new Emitter<void>();
 		this._showQueryResultsEditor = new Emitter<void>();
 		this._updateSelection = new Emitter<ISelectionData>();
@@ -66,34 +85,42 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 			// Register callbacks for the Actions
 			this._toDispose.push(
 				this._queryModelService.onRunQueryStart(uri => {
-					if (self.uri === uri) {
-						self.onRunQuery();
+					if (this.uri === uri) {
+						this.onRunQuery();
 					}
 				})
 			);
 
 			this._toDispose.push(
 				this._queryModelService.onRunQueryComplete(uri => {
-					if (self.uri === uri) {
-						self.onQueryComplete();
+					if (this.uri === uri) {
+						this.onQueryComplete();
 					}
 				})
 			);
 		}
 
 		if (this._connectionManagementService) {
-			this._toDispose.push(self._connectionManagementService.onDisconnect(result => {
-				if (result.connectionUri === self.uri) {
-					self.onDisconnect();
+			this._toDispose.push(this._connectionManagementService.onDisconnect(result => {
+				if (result.connectionUri === this.uri) {
+					this.onDisconnect();
 				}
 			}));
-			if (self.uri) {
+			if (this.uri) {
 				if (this._connectionProviderName) {
-					this._connectionManagementService.doChangeLanguageFlavor(self.uri, 'sql', this._connectionProviderName);
+					this._connectionManagementService.doChangeLanguageFlavor(this.uri, 'sql', this._connectionProviderName);
 				} else {
-					this._connectionManagementService.ensureDefaultLanguageFlavor(self.uri);
+					this._connectionManagementService.ensureDefaultLanguageFlavor(this.uri);
 				}
 			}
+		}
+
+		if (this._configurationService) {
+			this._toDispose.push(this._configurationService.onDidChangeConfiguration(e => {
+				if (e.affectedKeys.includes('sql.showConnectionInfoInTitle')) {
+					this._onDidChangeLabel.fire();
+				}
+			}));
 		}
 
 		this.onDisconnect();
@@ -136,11 +163,31 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 	public resolve(refresh?: boolean): TPromise<EditorModel> { return this._sql.resolve(); }
 	public save(): TPromise<boolean> { return this._sql.save(); }
 	public isDirty(): boolean { return this._sql.isDirty(); }
-	public confirmSave(): ConfirmResult { return this._sql.confirmSave(); }
+	public confirmSave(): TPromise<ConfirmResult> { return this._sql.confirmSave(); }
 	public getResource(): URI { return this._sql.getResource(); }
 	public getEncoding(): string { return this._sql.getEncoding(); }
 	public suggestFileName(): string { return this._sql.suggestFileName(); }
-	public getName(): string { return this._sql.getName(); }
+
+	public getName(): string {
+		if (this._configurationService.getValue('sql.showConnectionInfoInTitle')) {
+			let profile = this._connectionManagementService.getConnectionProfile(this.uri);
+			let title = '';
+			if (profile) {
+				if (profile.userName) {
+					title = `${profile.serverName}.${profile.databaseName} (${profile.userName})`;
+				} else {
+					title = `${profile.serverName}.${profile.databaseName} (${profile.authenticationType})`;
+				}
+			} else {
+				title = localize('disconnected', 'disconnected');
+			}
+
+			return this._sql.getName() + ` - ${trimTitle(title)}`;
+		} else {
+			return this._sql.getName();
+		}
+	}
+
 	public get hasAssociatedFilePath(): boolean { return this._sql.hasAssociatedFilePath; }
 
 	public setEncoding(encoding: string, mode: EncodingMode /* ignored, we only have Encode */): void {
@@ -149,17 +196,17 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 
 	// State update funtions
 	public runQuery(selection: ISelectionData, executePlanOptions?: ExecutionPlanOptions): void {
-		this._queryModelService.runQuery(this.uri, selection, this.uri, this, executePlanOptions);
+		this._queryModelService.runQuery(this.uri, selection, this, executePlanOptions);
 		this.showQueryResultsEditor();
 	}
 
 	public runQueryStatement(selection: ISelectionData): void {
-		this._queryModelService.runQueryStatement(this.uri, selection, this.uri, this);
+		this._queryModelService.runQueryStatement(this.uri, selection, this);
 		this.showQueryResultsEditor();
 	}
 
 	public runQueryString(text: string): void {
-		this._queryModelService.runQueryString(this.uri, text, this.uri, this);
+		this._queryModelService.runQueryString(this.uri, text, this);
 		this.showQueryResultsEditor();
 	}
 
@@ -176,6 +223,9 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 	public onConnectReject(): void {
 		this.onDisconnect();
 		this._updateTaskbar.fire();
+	}
+
+	public onConnectCanceled(): void {
 	}
 
 	public onConnectSuccess(params?: INewConnectionParams): void {
@@ -199,6 +249,7 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 			}
 		}
 		this._updateTaskbar.fire();
+		this._onDidChangeLabel.fire();
 	}
 
 	public onDisconnect(): void {
@@ -225,7 +276,6 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 
 	// Clean up functions
 	public dispose(): void {
-		this._queryModelService.disposeQuery(this.uri);
 		this._sql.dispose();
 		this._results.dispose();
 		this._toDispose = dispose(this._toDispose);
@@ -234,7 +284,7 @@ export class QueryInput extends EditorInput implements IEncodingSupport, IConnec
 	}
 
 	public close(): void {
-		this._queryEditorService.onQueryInputClosed(this.uri);
+		this._queryModelService.disposeQuery(this.uri);
 		this._connectionManagementService.disconnectEditor(this, true);
 
 		this._sql.close();

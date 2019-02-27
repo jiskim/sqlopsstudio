@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 'use strict';
-import { OptionsDialog } from 'sql/base/browser/ui/modal/optionsDialog';
+import { OptionsDialog } from 'sql/workbench/browser/modal/optionsDialog';
 import { AdvancedPropertiesController } from 'sql/parts/connection/connectionDialog/advancedPropertiesController';
-import { Builder, $ } from 'vs/base/browser/builder';
+import { Builder, $ } from 'sql/base/browser/builder';
 import { ContextKeyServiceStub } from 'sqltest/stubs/contextKeyServiceStub';
 import * as sqlops from 'sqlops';
 import * as TypeMoq from 'typemoq';
 import * as assert from 'assert';
+import { ServiceOptionType } from 'sql/workbench/api/common/sqlExtHostTypes';
 
 suite('Advanced properties dialog tests', () => {
 	var advancedController: AdvancedPropertiesController;
@@ -29,7 +30,7 @@ suite('Advanced properties dialog tests', () => {
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: null,
-				valueType: 0
+				valueType: ServiceOptionType.string
 			},
 			{
 				name: 'b1',
@@ -41,7 +42,7 @@ suite('Advanced properties dialog tests', () => {
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: null,
-				valueType: 0
+				valueType: ServiceOptionType.string
 			},
 			{
 				name: 'noType',
@@ -53,7 +54,7 @@ suite('Advanced properties dialog tests', () => {
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: null,
-				valueType: 0
+				valueType: ServiceOptionType.string
 			},
 			{
 				name: 'a2',
@@ -65,7 +66,7 @@ suite('Advanced properties dialog tests', () => {
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: null,
-				valueType: 0
+				valueType: ServiceOptionType.string
 			},
 			{
 				name: 'b2',
@@ -77,7 +78,7 @@ suite('Advanced properties dialog tests', () => {
 				isIdentity: true,
 				isRequired: true,
 				specialValueType: null,
-				valueType: 0
+				valueType: ServiceOptionType.string
 			}
 		];
 	});
@@ -93,6 +94,7 @@ suite('Advanced properties dialog tests', () => {
 			undefined, // partsService
 			undefined, // themeService
 			undefined, // Context view service
+			undefined, // instantiation Service
 			undefined, // telemetry service
 			new ContextKeyServiceStub() // contextkeyservice
 		);

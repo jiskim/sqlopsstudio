@@ -5,18 +5,19 @@
 
 import 'vs/css!./dashboard';
 
-import { OnInit, Component, Inject, forwardRef, ElementRef, ChangeDetectorRef, OnDestroy, ViewChild } from '@angular/core';
+import { OnInit, Component, Inject, forwardRef, ElementRef, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { DashboardServiceInterface } from './services/dashboardServiceInterface.service';
-import { IConnectionProfile } from 'sql/parts/connection/common/interfaces';
-import * as Utils from 'sql/parts/connection/common/utils';
+import { CommonServiceInterface } from 'sql/services/common/commonServiceInterface.service';
+import { IConnectionProfile } from 'sql/platform/connection/common/interfaces';
+import * as Utils from 'sql/platform/connection/common/utils';
 import { RefreshWidgetAction, EditDashboardAction } from 'sql/parts/dashboard/common/actions';
+import { DashboardPage } from 'sql/parts/dashboard/common/dashboardPage.component';
+import { AngularDisposable } from 'sql/base/node/lifecycle';
 
-import { IColorTheme } from 'vs/workbench/services/themes/common/workbenchThemeService';
+import { IColorTheme, IWorkbenchThemeService } from 'vs/workbench/services/themes/common/workbenchThemeService';
 import { IDisposable } from 'vs/base/common/lifecycle';
 import * as themeColors from 'vs/workbench/common/theme';
-import { DashboardPage } from 'sql/parts/dashboard/common/dashboardPage.component';
 import { ActionBar } from 'vs/base/browser/ui/actionbar/actionbar';
 
 export const DASHBOARD_SELECTOR: string = 'dashboard-component';
@@ -25,8 +26,7 @@ export const DASHBOARD_SELECTOR: string = 'dashboard-component';
 	selector: DASHBOARD_SELECTOR,
 	templateUrl: decodeURI(require.toUrl('./dashboard.component.html'))
 })
-export class DashboardComponent implements OnInit, OnDestroy {
-	private _subs: Array<IDisposable> = new Array();
+export class DashboardComponent extends AngularDisposable implements OnInit {
 	private _currentPage: DashboardPage;
 
 	@ViewChild('header', { read: ElementRef }) private header: ElementRef;
@@ -36,14 +36,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
 	private editDisposable: IDisposable;
 
 	constructor(
-		@Inject(forwardRef(() => DashboardServiceInterface)) private _bootstrapService: DashboardServiceInterface,
+		@Inject(forwardRef(() => CommonServiceInterface)) private _bootstrapService: CommonServiceInterface,
 		@Inject(forwardRef(() => Router)) private _router: Router,
-		@Inject(forwardRef(() => ChangeDetectorRef)) private _changeRef: ChangeDetectorRef
-	) { }
+		@Inject(forwardRef(() => ChangeDetectorRef)) private _changeRef: ChangeDetectorRef,
+		@Inject(IWorkbenchThemeService) private themeService: IWorkbenchThemeService
+	) {
+		super();
+	}
 
 	ngOnInit() {
-		this._subs.push(this._bootstrapService.themeService.onDidColorThemeChange(this.updateTheme, this));
-		this.updateTheme(this._bootstrapService.themeService.getColorTheme());
+		this._register(this.themeService.onDidColorThemeChange(this.updateTheme, this));
+		this.updateTheme(this.themeService.getColorTheme());
 		let profile: IConnectionProfile = this._bootstrapService.getOriginalConnectionProfile();
 		this.actionbar = new ActionBar(this.actionbarContainer.nativeElement);
 		this.actionbar.push(new RefreshWidgetAction(this.refresh, this), {
@@ -59,12 +62,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 			// Route to the server page as this is the default database
 			this._router.navigate(['server-dashboard']);
 		}
-	}
-
-	ngOnDestroy() {
-		this._subs.forEach((value) => {
-			value.dispose();
-		});
 	}
 
 	private updateTheme(theme: IColorTheme): void {

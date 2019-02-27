@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 'use strict';
-
+import 'vs/css!sql/media/overwriteVsIcons';
 import { Registry } from 'vs/platform/registry/common/platform';
 import { EditorDescriptor, IEditorRegistry, Extensions as EditorExtensions } from 'vs/workbench/browser/editor';
 import { SyncDescriptor } from 'vs/platform/instantiation/common/descriptors';
@@ -12,7 +12,7 @@ import { IWorkbenchActionRegistry, Extensions } from 'vs/workbench/common/action
 import { IConfigurationRegistry, Extensions as ConfigExtensions } from 'vs/platform/configuration/common/configurationRegistry';
 import { SyncActionDescriptor } from 'vs/platform/actions/common/actions';
 import { KeyMod, KeyCode, KeyChord } from 'vs/base/common/keyCodes';
-import { KeybindingsRegistry } from 'vs/platform/keybinding/common/keybindingsRegistry';
+import { KeybindingsRegistry, KeybindingWeight } from 'vs/platform/keybinding/common/keybindingsRegistry';
 import { ContextKeyExpr } from 'vs/platform/contextkey/common/contextkey';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 
@@ -25,7 +25,7 @@ import { EditDataEditor } from 'sql/parts/editData/editor/editDataEditor';
 import { EditDataInput } from 'sql/parts/editData/common/editDataInput';
 import {
 	RunQueryKeyboardAction, RunCurrentQueryKeyboardAction, CancelQueryKeyboardAction, RefreshIntellisenseKeyboardAction, ToggleQueryResultsKeyboardAction,
-	RunQueryShortcutAction, RunCurrentQueryWithActualPlanKeyboardAction
+	RunQueryShortcutAction, RunCurrentQueryWithActualPlanKeyboardAction, FocusOnCurrentQueryKeyboardAction, ParseSyntaxAction
 } from 'sql/parts/query/execution/keyboardQueryActions';
 import * as gridActions from 'sql/parts/grid/views/gridActions';
 import * as gridCommands from 'sql/parts/grid/views/gridCommands';
@@ -33,6 +33,8 @@ import { QueryPlanEditor } from 'sql/parts/queryPlan/queryPlanEditor';
 import { QueryPlanInput } from 'sql/parts/queryPlan/queryPlanInput';
 import * as Constants from 'sql/parts/query/common/constants';
 import { localize } from 'vs/nls';
+import { EditDataResultsEditor } from 'sql/parts/editData/editor/editDataResultsEditor';
+import { EditDataResultsInput } from 'sql/parts/editData/common/editDataResultsInput';
 
 const gridCommandsWeightBonus = 100; // give our commands a little bit more weight over other default list/tree commands
 
@@ -81,70 +83,103 @@ const editDataEditorDescriptor = new EditorDescriptor(
 Registry.as<IEditorRegistry>(EditorExtensions.Editors)
 	.registerEditor(editDataEditorDescriptor, [new SyncDescriptor(EditDataInput)]);
 
+// Editor
+const editDataResultsEditorDescriptor = new EditorDescriptor(
+	EditDataResultsEditor,
+	EditDataResultsEditor.ID,
+	'EditDataResults'
+);
+
+Registry.as<IEditorRegistry>(EditorExtensions.Editors)
+	.registerEditor(editDataResultsEditorDescriptor, [new SyncDescriptor(EditDataResultsInput)]);
+
 let actionRegistry = <IWorkbenchActionRegistry>Registry.as(Extensions.WorkbenchActions);
 
 // Query Actions
 actionRegistry.registerWorkbenchAction(
-		new SyncActionDescriptor(
-			RunQueryKeyboardAction,
-			RunQueryKeyboardAction.ID,
-			RunQueryKeyboardAction.LABEL,
-			{ primary: KeyCode.F5 }
-		),
-		RunQueryKeyboardAction.LABEL
-	);
+	new SyncActionDescriptor(
+		RunQueryKeyboardAction,
+		RunQueryKeyboardAction.ID,
+		RunQueryKeyboardAction.LABEL,
+		{ primary: KeyCode.F5 }
+	),
+	RunQueryKeyboardAction.LABEL
+);
 
 actionRegistry.registerWorkbenchAction(
-		new SyncActionDescriptor(
-			RunCurrentQueryKeyboardAction,
-			RunCurrentQueryKeyboardAction.ID,
-			RunCurrentQueryKeyboardAction.LABEL,
-			{ primary:KeyMod.CtrlCmd | KeyCode.F5 }
-		),
-		RunCurrentQueryKeyboardAction.LABEL
-	);
+	new SyncActionDescriptor(
+		RunCurrentQueryKeyboardAction,
+		RunCurrentQueryKeyboardAction.ID,
+		RunCurrentQueryKeyboardAction.LABEL,
+		{ primary: KeyMod.CtrlCmd | KeyCode.F5 }
+	),
+	RunCurrentQueryKeyboardAction.LABEL
+);
 
 actionRegistry.registerWorkbenchAction(
 	new SyncActionDescriptor(
 		RunCurrentQueryWithActualPlanKeyboardAction,
 		RunCurrentQueryWithActualPlanKeyboardAction.ID,
-		RunCurrentQueryWithActualPlanKeyboardAction.LABEL
+		RunCurrentQueryWithActualPlanKeyboardAction.LABEL,
+		{ primary: KeyMod.CtrlCmd | KeyCode.KEY_M }
 	),
 	RunCurrentQueryWithActualPlanKeyboardAction.LABEL
 );
 
 actionRegistry.registerWorkbenchAction(
-		new SyncActionDescriptor(
-			CancelQueryKeyboardAction,
-			CancelQueryKeyboardAction.ID,
-			CancelQueryKeyboardAction.LABEL,
-			{ primary: KeyMod.Alt | KeyCode.PauseBreak }
-		),
-		CancelQueryKeyboardAction.LABEL
-	);
+	new SyncActionDescriptor(
+		CancelQueryKeyboardAction,
+		CancelQueryKeyboardAction.ID,
+		CancelQueryKeyboardAction.LABEL,
+		{ primary: KeyMod.Alt | KeyCode.PauseBreak }
+	),
+	CancelQueryKeyboardAction.LABEL
+);
 
 actionRegistry.registerWorkbenchAction(
-		new SyncActionDescriptor(
-			RefreshIntellisenseKeyboardAction,
-			RefreshIntellisenseKeyboardAction.ID,
-			RefreshIntellisenseKeyboardAction.LABEL
-		),
+	new SyncActionDescriptor(
+		RefreshIntellisenseKeyboardAction,
+		RefreshIntellisenseKeyboardAction.ID,
 		RefreshIntellisenseKeyboardAction.LABEL
-	);
+	),
+	RefreshIntellisenseKeyboardAction.LABEL
+);
 
 actionRegistry.registerWorkbenchAction(
-		new SyncActionDescriptor(
-			ToggleQueryResultsKeyboardAction,
-			ToggleQueryResultsKeyboardAction.ID,
-			ToggleQueryResultsKeyboardAction.LABEL
-		),
-		ToggleQueryResultsKeyboardAction.LABEL
-	);
+	new SyncActionDescriptor(
+		FocusOnCurrentQueryKeyboardAction,
+		FocusOnCurrentQueryKeyboardAction.ID,
+		FocusOnCurrentQueryKeyboardAction.LABEL,
+		{ primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KEY_O }
+	),
+	FocusOnCurrentQueryKeyboardAction.LABEL
+);
+
+actionRegistry.registerWorkbenchAction(
+	new SyncActionDescriptor(
+		ParseSyntaxAction,
+		ParseSyntaxAction.ID,
+		ParseSyntaxAction.LABEL
+	),
+	ParseSyntaxAction.LABEL
+);
+
 // Grid actions
+
+actionRegistry.registerWorkbenchAction(
+	new SyncActionDescriptor(
+		ToggleQueryResultsKeyboardAction,
+		ToggleQueryResultsKeyboardAction.ID,
+		ToggleQueryResultsKeyboardAction.LABEL,
+		{ primary: KeyMod.WinCtrl | KeyMod.Shift | KeyCode.KEY_R },
+		QueryEditorVisibleCondition
+	),
+	ToggleQueryResultsKeyboardAction.LABEL
+);
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.GRID_COPY_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: ResultsGridFocusCondition,
 	primary: KeyMod.CtrlCmd | KeyCode.KEY_C,
 	handler: gridCommands.copySelection
@@ -152,7 +187,7 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.MESSAGES_SELECTALL_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: ResultsMessagesFocusCondition,
 	primary: KeyMod.CtrlCmd | KeyCode.KEY_A,
 	handler: gridCommands.selectAllMessages
@@ -160,7 +195,7 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.GRID_SELECTALL_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: ResultsGridFocusCondition,
 	primary: KeyMod.CtrlCmd | KeyCode.KEY_A,
 	handler: gridCommands.selectAll
@@ -168,7 +203,7 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.MESSAGES_COPY_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: ResultsMessagesFocusCondition,
 	primary: KeyMod.CtrlCmd | KeyCode.KEY_C,
 	handler: gridCommands.copyMessagesSelection
@@ -176,7 +211,7 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.GRID_SAVECSV_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: ResultsGridFocusCondition,
 	primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_R, KeyMod.CtrlCmd | KeyCode.KEY_C),
 	handler: gridCommands.saveAsCsv
@@ -184,7 +219,7 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.GRID_SAVEJSON_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: ResultsGridFocusCondition,
 	primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_R, KeyMod.CtrlCmd | KeyCode.KEY_J),
 	handler: gridCommands.saveAsJson
@@ -192,26 +227,58 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.GRID_SAVEEXCEL_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: ResultsGridFocusCondition,
 	primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_R, KeyMod.CtrlCmd | KeyCode.KEY_E),
 	handler: gridCommands.saveAsExcel
 });
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
+	id: gridActions.GRID_SAVEXML_ID,
+	weight: KeybindingWeight.EditorContrib,
+	when: ResultsGridFocusCondition,
+	primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_R, KeyMod.CtrlCmd | KeyCode.KEY_X),
+	handler: gridCommands.saveAsXml
+});
+
+KeybindingsRegistry.registerCommandAndKeybindingRule({
+	id: gridActions.GRID_VIEWASCHART_ID,
+	weight: KeybindingWeight.EditorContrib,
+	when: ResultsGridFocusCondition,
+	primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_R, KeyMod.CtrlCmd | KeyCode.KEY_V),
+	handler: gridCommands.viewAsChart
+});
+
+KeybindingsRegistry.registerCommandAndKeybindingRule({
+	id: gridActions.GRID_GOTONEXTGRID_ID,
+	weight: KeybindingWeight.EditorContrib,
+	when: ResultsGridFocusCondition,
+	primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KEY_R, KeyMod.CtrlCmd | KeyCode.KEY_N),
+	handler: gridCommands.goToNextGrid
+});
+
+KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.TOGGLERESULTS_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: QueryEditorVisibleCondition,
-	primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KEY_R,
+	primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KEY_R,
 	handler: gridCommands.toggleResultsPane
 });
 
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: gridActions.TOGGLEMESSAGES_ID,
-	weight: KeybindingsRegistry.WEIGHT.workbenchContrib(gridCommandsWeightBonus),
+	weight: KeybindingWeight.EditorContrib,
 	when: QueryEditorVisibleCondition,
-	primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KEY_Y,
+	primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KEY_Y,
 	handler: gridCommands.toggleMessagePane
+});
+
+KeybindingsRegistry.registerCommandAndKeybindingRule({
+	id: gridActions.GOTONEXTQUERYOUTPUTTAB_ID,
+	weight: KeybindingWeight.EditorContrib,
+	when: QueryEditorVisibleCondition,
+	primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KEY_P,
+	handler: gridCommands.goToNextQueryOutputTab
 });
 
 // Intellisense and other configuration options
@@ -225,6 +292,41 @@ let registryProperties = {
 		'type': 'boolean',
 		'description': localize('sql.saveAsCsv.includeHeaders', '[Optional] When true, column headers are included when saving results as CSV'),
 		'default': true
+	},
+	'sql.saveAsCsv.delimiter': {
+		'type': 'string',
+		'description': localize('sql.saveAsCsv.delimiter', '[Optional] The custom delimiter to use between values when saving as CSV'),
+		'default': ','
+	},
+	'sql.saveAsCsv.lineSeperator': {
+		'type': '',
+		'description': localize('sql.saveAsCsv.lineSeperator', '[Optional] Character(s) used for seperating rows when saving results as CSV'),
+		'default': null
+	},
+	'sql.saveAsCsv.textIdentifier': {
+		'type': 'string',
+		'description': localize('sql.saveAsCsv.textIdentifier', '[Optional] Character used for enclosing text fields when saving results as CSV'),
+		'default': '\"'
+	},
+	'sql.saveAsCsv.encoding': {
+		'type': 'string',
+		'description': localize('sql.saveAsCsv.encoding', '[Optional] File encoding used when saving results as CSV'),
+		'default': 'utf-8'
+	},
+	'sql.results.streaming': {
+		'type': 'boolean',
+		'description': localize('sql.results.streaming', 'Enable results streaming; contains few minor visual issues'),
+		'default': true
+	},
+	'sql.saveAsXml.formatted': {
+		'type': 'string',
+		'description': localize('sql.saveAsXml.formatted', '[Optional] When true, XML output will be formatted when saving results as XML'),
+		'default': true
+	},
+	'sql.saveAsXml.encoding': {
+		'type': 'string',
+		'description': localize('sql.saveAsXml.encoding', '[Optional] File encoding used when saving results as XML'),
+		'default': 'utf-8'
 	},
 	'sql.copyIncludeHeaders': {
 		'type': 'boolean',
@@ -256,6 +358,16 @@ let registryProperties = {
 		],
 		'default': Constants.tabColorModeOff,
 		'description': localize('tabColorMode', "Controls how to color tabs based on the server group of their active connection")
+	},
+	'sql.showConnectionInfoInTitle': {
+		'type': 'boolean',
+		'description': localize('showConnectionInfoInTitle', "Controls whether to show the connection info for a tab in the title."),
+		'default': true
+	},
+	'sql.promptToSaveGeneratedFiles': {
+		'type': 'boolean',
+		'default': false,
+		'description': localize('sql.promptToSaveGeneratedFiles', 'Prompt to save generated SQL files')
 	},
 	'mssql.intelliSense.enableIntelliSense': {
 		'type': 'boolean',
@@ -296,11 +408,11 @@ for (let i = 0; i < 9; i++) {
 	const queryIndex = i + 1;
 	let settingKey = `sql.query.shortcut${queryIndex}`;
 	let defaultVal = i < initialShortcuts.length ? initialShortcuts[i].name : '';
-	let defaultPrimary =  i < initialShortcuts.length ? initialShortcuts[i].primary : null;
+	let defaultPrimary = i < initialShortcuts.length ? initialShortcuts[i].primary : null;
 
 	KeybindingsRegistry.registerCommandAndKeybindingRule({
 		id: `workbench.action.query.shortcut${queryIndex}`,
-		weight: KeybindingsRegistry.WEIGHT.workbenchContrib(),
+		weight: KeybindingWeight.WorkbenchContrib,
 		when: QueryEditorVisibleCondition,
 		primary: defaultPrimary,
 		handler: accessor => {
@@ -324,6 +436,3 @@ configurationRegistry.registerConfiguration({
 	'type': 'object',
 	'properties': registryProperties
 });
-
-
-

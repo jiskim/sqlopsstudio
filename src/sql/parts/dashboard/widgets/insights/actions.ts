@@ -7,11 +7,11 @@ import * as nls from 'vs/nls';
 import { TPromise } from 'vs/base/common/winjs.base';
 
 import * as TaskUtilities from 'sql/workbench/common/taskUtilities';
-import { RunQueryOnConnectionMode, IConnectionManagementService } from 'sql/parts/connection/common/connectionManagement';
-import { IQueryEditorService } from 'sql/parts/query/common/queryEditorService';
+import { RunQueryOnConnectionMode, IConnectionManagementService } from 'sql/platform/connection/common/connectionManagement';
+import { IQueryEditorService } from 'sql/workbench/services/queryEditor/common/queryEditorService';
 import { InsightActionContext } from 'sql/workbench/common/actions';
-import { IObjectExplorerService } from 'sql/parts/registeredServer/common/objectExplorerService';
-import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { IObjectExplorerService } from 'sql/workbench/services/objectExplorer/common/objectExplorerService';
+import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 
 export class RunInsightQueryAction extends Action {
 	public static ID = 'runQuery';
@@ -22,7 +22,7 @@ export class RunInsightQueryAction extends Action {
 		@IQueryEditorService protected _queryEditorService: IQueryEditorService,
 		@IConnectionManagementService protected _connectionManagementService: IConnectionManagementService,
 		@IObjectExplorerService protected _objectExplorerService: IObjectExplorerService,
-		@IWorkbenchEditorService protected _workbenchEditorService: IWorkbenchEditorService
+		@IEditorService protected _workbenchEditorService: IEditorService
 	) {
 		super(id, label);
 	}

@@ -19,7 +19,7 @@ export class EditDataGridActionProvider extends GridActionProvider {
 		dataService: DataService,
 		selectAllCallback: (index: number) => void,
 		private _deleteRowCallback: (index: number) => void,
-		private _revertRowCallback: (index: number) => void,
+		private _revertRowCallback: () => void,
 		@IInstantiationService instantiationService: IInstantiationService
 	) {
 		super(dataService, selectAllCallback, instantiationService);
@@ -27,12 +27,12 @@ export class EditDataGridActionProvider extends GridActionProvider {
 	/**
 	 * Return actions given a click on an edit data grid
 	 */
-	public getGridActions(): TPromise<IAction[]> {
+	public getGridActions(): IAction[] {
 		let actions: IAction[] = [];
 		actions.push(new DeleteRowAction(DeleteRowAction.ID, DeleteRowAction.LABEL, this._deleteRowCallback));
 		actions.push(new RevertRowAction(RevertRowAction.ID, RevertRowAction.LABEL, this._revertRowCallback));
 
-		return TPromise.as(actions);
+		return actions;
 	}
 }
 
@@ -56,18 +56,18 @@ export class DeleteRowAction extends Action {
 
 export class RevertRowAction extends Action {
 	public static ID = 'grid.revertRow';
-	public static LABEL = localize('revertRow', 'Revert Row');
+	public static LABEL = localize('revertRow', 'Revert Current Row');
 
 	constructor(
 		id: string,
 		label: string,
-		private callback: (index: number) => void
+		private callback: () => void
 	) {
 		super(id, label);
 	}
 
 	public run(gridInfo: IGridInfo): TPromise<boolean> {
-		this.callback(gridInfo.rowIndex);
+		this.callback();
 		return TPromise.as(true);
 	}
 }

@@ -6,7 +6,7 @@
 import { IProfilerController } from './interfaces';
 import { ProfilerInput } from 'sql/parts/profiler/editor/profilerInput';
 import { Table } from 'sql/base/browser/ui/table/table';
-import { attachTableStyler } from 'sql/common/theme/styler';
+import { attachTableStyler } from 'sql/platform/theme/common/styler';
 import { RowSelectionModel } from 'sql/base/browser/ui/table/plugins/rowSelectionModel.plugin';
 import { IProfilerStateChangedEvent } from 'sql/parts/profiler/editor/profilerState';
 import { FindWidget, ITableController, IConfigurationChangedEvent, ACTION_IDS } from './profilerFindWidget';
@@ -21,11 +21,21 @@ import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { IEditorAction } from 'vs/editor/common/editorCommon';
 import { IOverlayWidget } from 'vs/editor/browser/editorBrowser';
 import { FindReplaceState, FindReplaceStateChangedEvent } from 'vs/editor/contrib/find/findState';
-import { Dimension, Builder } from 'vs/base/browser/builder';
 import { BaseEditor } from 'vs/workbench/browser/parts/editor/baseEditor';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
-import Event, { Emitter } from 'vs/base/common/event';
+import { Event, Emitter } from 'vs/base/common/event';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+import { Dimension } from 'vs/base/browser/dom';
+import { textFormatter } from 'sql/parts/grid/services/sharedServices';
+import { PROFILER_MAX_MATCHES } from 'sql/parts/profiler/editor/controller/profilerFindWidget';
+import { IStorageService } from 'vs/platform/storage/common/storage';
+import { IStatusbarService, StatusbarAlignment, IStatusbarEntry } from 'vs/platform/statusbar/common/statusbar';
+import { localize } from 'vs/nls';
+
+export interface ProfilerTableViewState {
+	scrollTop: number;
+	scrollLeft: number;
+}
 
 export class ProfilerTableEditor extends BaseEditor implements IProfilerController, ITableController {
 
@@ -40,6 +50,8 @@ export class ProfilerTableEditor extends BaseEditor implements IProfilerControll
 	private _overlay: HTMLElement;
 	private _currentDimensions: Dimension;
 	private _actionMap: { [x: string]: IEditorAction } = {};
+	private _statusbarItem: IDisposable;
+	private _showStatusBarItem: boolean;
 
 	private _onDidChangeConfiguration = new Emitter<IConfigurationChangedEvent>();
 	public onDidChangeConfiguration: Event<IConfigurationChangedEvent> = this._onDidChangeConfiguration.event;
@@ -50,22 +62,34 @@ export class ProfilerTableEditor extends BaseEditor implements IProfilerControll
 		@IContextViewService private _contextViewService: IContextViewService,
 		@IKeybindingService private _keybindingService: IKeybindingService,
 		@IContextKeyService private _contextKeyService: IContextKeyService,
-		@IInstantiationService private _instantiationService: IInstantiationService
+		@IInstantiationService private _instantiationService: IInstantiationService,
+		@IStorageService storageService: IStorageService,
+		@IStatusbarService private _statusbarService: IStatusbarService
 	) {
-		super(ProfilerTableEditor.ID, telemetryService, _themeService);
+		super(ProfilerTableEditor.ID, telemetryService, _themeService, storageService);
 		this._actionMap[ACTION_IDS.FIND_NEXT] = this._instantiationService.createInstance(ProfilerFindNext, this);
 		this._actionMap[ACTION_IDS.FIND_PREVIOUS] = this._instantiationService.createInstance(ProfilerFindPrevious, this);
+		this._showStatusBarItem = true;
 	}
 
-	public createEditor(parent: Builder): void {
+	public createEditor(parent: HTMLElement): void {
 
 		this._overlay = document.createElement('div');
 		this._overlay.className = 'overlayWidgets';
 		this._overlay.style.width = '100%';
 		this._overlay.style.zIndex = '4';
-		parent.getHTMLElement().appendChild(this._overlay);
+		parent.appendChild(this._overlay);
 
-		this._profilerTable = new Table(parent.getHTMLElement());
+		this._profilerTable = new Table(parent, {
+			sorter: {
+				sort: (args) => {
+					let input = this.input as ProfilerInput;
+					if (input && input.data) {
+						input.data.sort(args);
+					}
+				}
+			}
+		});
 		this._profilerTable.setSelectionModel(new RowSelectionModel());
 		attachTableStyler(this._profilerTable, this._themeService);
 
@@ -83,18 +107,35 @@ export class ProfilerTableEditor extends BaseEditor implements IProfilerControll
 	}
 
 	public setInput(input: ProfilerInput): TPromise<void> {
+		this._showStatusBarItem = true;
 		this._input = input;
+
+		this._updateRowCountStatus();
+
 		if (this._columnListener) {
 			this._columnListener.dispose();
 		}
 		this._columnListener = input.onColumnsChanged(e => {
-			this._profilerTable.columns = e;
+			this._profilerTable.columns = e.map(e => {
+				e.formatter = textFormatter;
+				return e;
+			});
 			this._profilerTable.autosizeColumns();
 		});
 		if (this._stateListener) {
 			this._stateListener.dispose();
 		}
 		this._stateListener = input.state.addChangeListener(e => this._onStateChange(e));
+		input.data.onRowCountChange(() => {
+			this._profilerTable.updateRowCount();
+			this._updateRowCountStatus();
+		});
+
+		input.data.onFilterStateChange(() => {
+			this._profilerTable.grid.invalidateAllRows();
+			this._profilerTable.updateRowCount();
+			this._updateRowCountStatus();
+		});
 
 		if (this._findCountChangeListener) {
 			this._findCountChangeListener.dispose();
@@ -108,6 +149,10 @@ export class ProfilerTableEditor extends BaseEditor implements IProfilerControll
 			this._profilerTable.setActiveCell(val.row, val.col);
 			this._updateFinderMatchState();
 		}, er => { });
+
+		this._input.onDispose(() => {
+			this._disposeStatusbarItem();
+		});
 		return TPromise.as(null);
 	}
 
@@ -162,6 +207,7 @@ export class ProfilerTableEditor extends BaseEditor implements IProfilerControll
 	public layout(dimension: Dimension): void {
 		this._currentDimensions = dimension;
 		this._profilerTable.layout(dimension);
+		this._profilerTable.autosizeColumns();
 		this._onDidChangeConfiguration.fire({ layoutInfo: true });
 	}
 
@@ -194,10 +240,11 @@ export class ProfilerTableEditor extends BaseEditor implements IProfilerControll
 		if (e.searchString) {
 			if (this._input && this._input.data) {
 				if (this._findState.searchString) {
-					this._input.data.find(this._findState.searchString).then(p => {
+					this._input.data.find(this._findState.searchString, PROFILER_MAX_MATCHES).then(p => {
 						if (p) {
 							this._profilerTable.setActiveCell(p.row, p.col);
 							this._updateFinderMatchState();
+							this._finder.focusFindInput();
 						}
 					});
 				} else {
@@ -213,5 +260,40 @@ export class ProfilerTableEditor extends BaseEditor implements IProfilerControll
 		} else {
 			this._findState.changeMatchInfo(0, 0, undefined);
 		}
+	}
+
+	private _updateRowCountStatus(): void {
+		if (this._showStatusBarItem) {
+			let message = this._input.data.filterEnabled ?
+				localize('ProfilerTableEditor.eventCountFiltered', 'Events (Filtered): {0}/{1}', this._input.data.getLength(), this._input.data.getLengthNonFiltered())
+				: localize('ProfilerTableEditor.eventCount', 'Events: {0}', this._input.data.getLength());
+
+			this._disposeStatusbarItem();
+			this._statusbarItem = this._statusbarService.addEntry({ text: message }, StatusbarAlignment.RIGHT);
+		}
+	}
+
+	private _disposeStatusbarItem() {
+		if (this._statusbarItem) {
+			this._statusbarItem.dispose();
+		}
+	}
+
+	public saveViewState(): ProfilerTableViewState {
+		this._disposeStatusbarItem();
+		this._showStatusBarItem = false;
+		let viewElement = this._profilerTable.grid.getCanvasNode().parentElement;
+		return {
+			scrollTop: viewElement.scrollTop,
+			scrollLeft: viewElement.scrollLeft
+		};
+	}
+
+	public restoreViewState(state: ProfilerTableViewState): void {
+		this._showStatusBarItem = true;
+		this._updateRowCountStatus();
+		let viewElement = this._profilerTable.grid.getCanvasNode().parentElement;
+		viewElement.scrollTop = state.scrollTop;
+		viewElement.scrollLeft = state.scrollLeft;
 	}
 }
